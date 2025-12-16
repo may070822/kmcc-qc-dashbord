@@ -47,11 +47,11 @@ function onOpen() {
 }
 
 /**
- * 데이터 동기화 - 로우 데이터를 웹앱으로 전송
+ * 데이터 동기화 - 배치 전송으로 로우 데이터를 웹앱으로 전송
  */
 function syncData() {
   try {
-    Logger.log('[v0] 동기화 시작...');
+    Logger.log('[v0] ===== 동기화 시작 =====');
     
     // 용산 데이터 읽기
     const yonsanData = readSheetData(YONGSAN_SHEET, '용산');
@@ -61,22 +61,102 @@ function syncData() {
     const gwangjuData = readSheetData(GWANGJU_SHEET, '광주');
     Logger.log(`[v0] 광주 데이터: ${gwangjuData.length}건`);
     
-    // 웹앱으로 전송
-    const payload = {
-      timestamp: new Date().toISOString(),
-      yonsan: yonsanData,
-      gwangju: gwangjuData,
-      totalRecords: yonsanData.length + gwangjuData.length
-    };
+    const totalRecords = yonsanData.length + gwangjuData.length;
+    Logger.log(`[v0] 총 데이터: ${totalRecords}건`);
     
-    const response = sendToWebApp(payload);
-    Logger.log('[v0] 동기화 완료: ' + response);
+    // 배치 전송 (각 배치는 최대 3MB로 제한)
+    const BATCH_SIZE = 2000; // 한 번에 전송할 레코드 수 (조정 가능)
+    const MAX_PAYLOAD_SIZE = 3 * 1024 * 1024; // 3MB
     
-    SpreadsheetApp.getUi().alert('✅ 동기화 완료!\n' + response);
+    let totalProcessed = 0;
+    let batchNumber = 0;
+    
+    // 용산 데이터 배치 전송
+    for (let i = 0; i < yonsanData.length; i += BATCH_SIZE) {
+      batchNumber++;
+      const batch = yonsanData.slice(i, i + BATCH_SIZE);
+      const payload = {
+        batch: batchNumber,
+        isLast: false,
+        timestamp: new Date().toISOString(),
+        yonsan: batch,
+        gwangju: [],
+        totalRecords: totalRecords,
+        processedSoFar: totalProcessed
+      };
+      
+      const payloadSize = JSON.stringify(payload).length;
+      Logger.log(`[v0] 배치 ${batchNumber} (용산): ${batch.length}건, 크기: ${(payloadSize / 1024).toFixed(2)}KB`);
+      
+      if (payloadSize > MAX_PAYLOAD_SIZE) {
+        // 배치가 너무 크면 더 작게 나눔
+        const smallerBatch = Math.floor(BATCH_SIZE / 2);
+        Logger.log(`[v0] 배치 크기 조정: ${BATCH_SIZE} -> ${smallerBatch}`);
+        i -= BATCH_SIZE; // 현재 배치 다시 처리
+        continue;
+      }
+      
+      const response = sendToWebApp(payload);
+      totalProcessed += batch.length;
+      Logger.log(`[v0] 배치 ${batchNumber} 완료: ${response}`);
+      
+      // API 호출 제한을 피하기 위해 짧은 대기
+      Utilities.sleep(100);
+    }
+    
+    // 광주 데이터 배치 전송
+    for (let i = 0; i < gwangjuData.length; i += BATCH_SIZE) {
+      batchNumber++;
+      const batch = gwangjuData.slice(i, i + BATCH_SIZE);
+      const isLast = (i + BATCH_SIZE >= gwangjuData.length);
+      
+      const payload = {
+        batch: batchNumber,
+        isLast: isLast,
+        timestamp: new Date().toISOString(),
+        yonsan: [],
+        gwangju: batch,
+        totalRecords: totalRecords,
+        processedSoFar: totalProcessed
+      };
+      
+      const payloadSize = JSON.stringify(payload).length;
+      Logger.log(`[v0] 배치 ${batchNumber} (광주): ${batch.length}건, 크기: ${(payloadSize / 1024).toFixed(2)}KB`);
+      
+      if (payloadSize > MAX_PAYLOAD_SIZE) {
+        const smallerBatch = Math.floor(BATCH_SIZE / 2);
+        Logger.log(`[v0] 배치 크기 조정: ${BATCH_SIZE} -> ${smallerBatch}`);
+        i -= BATCH_SIZE;
+        continue;
+      }
+      
+      const response = sendToWebApp(payload);
+      totalProcessed += batch.length;
+      Logger.log(`[v0] 배치 ${batchNumber} 완료: ${response}`);
+      
+      Utilities.sleep(100);
+    }
+    
+    Logger.log(`[v0] ===== 동기화 완료: 총 ${totalProcessed}건 처리 =====`);
+    
+    const successMessage = `✅ 동기화 완료!\n총 ${totalProcessed}건 처리됨\n${batchNumber}개 배치 전송`;
+    
+    // UI는 시트 메뉴에서 실행할 때만 표시
+    try {
+      SpreadsheetApp.getUi().alert(successMessage);
+    } catch (uiError) {
+      Logger.log('[v0] UI 알림 스킵 (에디터에서 실행 중)');
+    }
   } catch (e) {
-    Logger.log('[v0] 오류: ' + e.message);
+    Logger.log('[v0] ❌ 오류: ' + e.message);
     Logger.log('[v0] 스택: ' + e.stack);
-    SpreadsheetApp.getUi().alert('❌ 오류 발생\n' + e.message);
+    
+    // UI는 시트 메뉴에서 실행할 때만 표시
+    try {
+      SpreadsheetApp.getUi().alert('❌ 오류 발생\n' + e.message);
+    } catch (uiError) {
+      Logger.log('[v0] UI 알림 스킵 (에디터에서 실행 중)');
+    }
   }
 }
 
@@ -218,7 +298,11 @@ function sendToWebApp(payload) {
     }
     
     // 성공 메시지 반환
-    if (result.message) {
+    if (result.batch) {
+      // 배치 응답
+      const batchInfo = result.batch;
+      return `배치 ${batchInfo.batchNumber}: ${batchInfo.currentBatch.evaluations}건 처리 (전체 진행: ${batchInfo.processedSoFar}/${batchInfo.totalRecords})`;
+    } else if (result.message) {
       return result.message;
     } else if (result.summary) {
       return `총 ${result.summary.evaluations || result.summary.totalRecords || 0}건 처리됨`;
@@ -239,7 +323,7 @@ function sendToWebApp(payload) {
  */
 function testConnection() {
   try {
-    Logger.log('[v0] 연결 테스트 시작...');
+    Logger.log('[v0] ===== 연결 테스트 시작 =====');
     Logger.log('[v0] 테스트 URL: ' + WEBAPP_URL);
     
     const options = {
@@ -247,10 +331,15 @@ function testConnection() {
       muteHttpExceptions: true
     };
     
+    const startTime = new Date().getTime();
     const response = UrlFetchApp.fetch(WEBAPP_URL, options);
+    const endTime = new Date().getTime();
+    const responseTime = endTime - startTime;
+    
     const responseCode = response.getResponseCode();
     const responseText = response.getContentText();
     
+    Logger.log('[v0] 응답 시간: ' + responseTime + 'ms');
     Logger.log('[v0] 응답 코드: ' + responseCode);
     Logger.log('[v0] 응답 본문: ' + responseText);
     
@@ -258,29 +347,52 @@ function testConnection() {
       let result;
       try {
         result = JSON.parse(responseText);
+        Logger.log('[v0] ✅ 연결 성공!');
+        Logger.log('[v0] 응답 데이터: ' + JSON.stringify(result, null, 2));
+        
+        // UI는 시트 메뉴에서 실행할 때만 표시 (에디터에서 직접 실행 시 스킵)
+        // 주석 해제하여 사용 가능:
+        // try {
+        //   SpreadsheetApp.getUi().alert(
+        //     '✅ 연결 성공!\n\n' +
+        //     'URL: ' + WEBAPP_URL + '\n' +
+        //     '상태: ' + responseCode + '\n' +
+        //     '응답 시간: ' + responseTime + 'ms'
+        //   );
+        // } catch (uiError) {
+        //   Logger.log('[v0] UI 알림 스킵 (에디터에서 실행 중)');
+        // }
       } catch (e) {
-        result = { raw: responseText };
+        Logger.log('[v0] ⚠️ JSON 파싱 실패: ' + e.message);
+        Logger.log('[v0] 원본 응답: ' + responseText);
       }
-      
-      SpreadsheetApp.getUi().alert(
-        '✅ 연결 성공!\n\n' +
-        'URL: ' + WEBAPP_URL + '\n' +
-        '상태: ' + responseCode + '\n' +
-        '응답: ' + JSON.stringify(result, null, 2)
-      );
-      Logger.log('[v0] 연결 성공: ' + JSON.stringify(result));
     } else {
-      SpreadsheetApp.getUi().alert(
-        '❌ 연결 실패\n\n' +
-        '상태 코드: ' + responseCode + '\n' +
-        '응답: ' + responseText.substring(0, 200)
-      );
+      Logger.log('[v0] ❌ 연결 실패 - 상태 코드: ' + responseCode);
+      Logger.log('[v0] 응답: ' + responseText.substring(0, 500));
+      
+      // UI는 시트 메뉴에서 실행할 때만 표시
+      // try {
+      //   SpreadsheetApp.getUi().alert(
+      //     '❌ 연결 실패\n\n' +
+      //     '상태 코드: ' + responseCode + '\n' +
+      //     '응답: ' + responseText.substring(0, 200)
+      //   );
+      // } catch (uiError) {
+      //   // UI가 없으면 무시
+      // }
     }
+    
+    Logger.log('[v0] ===== 연결 테스트 완료 =====');
   } catch (e) {
-    const errorMsg = '오류: ' + e.message + '\n\n스택: ' + e.stack;
-    SpreadsheetApp.getUi().alert(errorMsg);
-    Logger.log('[v0] 오류: ' + e.message);
+    Logger.log('[v0] ❌ 오류 발생: ' + e.message);
     Logger.log('[v0] 스택: ' + e.stack);
+    
+    // UI는 시트 메뉴에서 실행할 때만 표시
+    // try {
+    //   SpreadsheetApp.getUi().alert('❌ 오류: ' + e.message);
+    // } catch (uiError) {
+    //   // UI가 없으면 무시
+    // }
   }
 }
 

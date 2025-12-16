@@ -37,13 +37,28 @@ export async function POST(request: NextRequest) {
     // 데이터 형식 확인 및 처리
     let parsedData
     
-    // 형식 1: Apps Script 형식 { yonsan: [...], gwangju: [...] }
+    // 형식 1: Apps Script 형식 { yonsan: [...], gwangju: [...] } (배치 지원)
     if (data.yonsan || data.gwangju) {
-      console.log("[API] Apps Script 형식 데이터 수신")
+      const batchNumber = data.batch || 0
+      const isLast = data.isLast === true
+      const processedSoFar = data.processedSoFar || 0
+      const totalRecords = data.totalRecords || 0
+      
+      console.log(`[API] Apps Script 배치 데이터 수신: 배치 ${batchNumber}, ${isLast ? '마지막' : '진행중'}`)
+      
       const yonsanRecords = Array.isArray(data.yonsan) ? data.yonsan : []
       const gwangjuRecords = Array.isArray(data.gwangju) ? data.gwangju : []
       
       parsedData = parseAppsScriptData(yonsanRecords, gwangjuRecords)
+      
+      // 배치 정보 포함
+      ;(parsedData as any).batchInfo = {
+        batchNumber,
+        isLast,
+        processedSoFar,
+        totalRecords,
+        currentBatchSize: yonsanRecords.length + gwangjuRecords.length,
+      }
     }
     // 형식 2: 로우 배열 형식 [[headers], [row1], [row2], ...]
     else if (Array.isArray(data) && data.length > 0) {
@@ -73,20 +88,47 @@ export async function POST(request: NextRequest) {
 
     // 여기서 실제로는 데이터베이스에 저장하거나 상태 관리
     // 현재는 메모리에 저장 (실제 배포시 DB 연동 필요)
-    console.log(`[API] Synced ${parsedData.evaluations.length} evaluations, ${parsedData.agents.length} agents`)
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: `${parsedData.evaluations.length}건의 평가 데이터가 동기화되었습니다.`,
-        timestamp: new Date().toISOString(),
-        summary: {
-          agents: parsedData.agents.length,
-          evaluations: parsedData.evaluations.length,
+    const batchInfo = (parsedData as any).batchInfo
+    
+    if (batchInfo) {
+      // 배치 처리
+      console.log(`[API] 배치 ${batchInfo.batchNumber} 처리: ${parsedData.evaluations.length}건`)
+      
+      return NextResponse.json(
+        {
+          success: true,
+          message: `배치 ${batchInfo.batchNumber} 처리 완료: ${parsedData.evaluations.length}건`,
+          timestamp: new Date().toISOString(),
+          batch: {
+            batchNumber: batchInfo.batchNumber,
+            isLast: batchInfo.isLast,
+            processedSoFar: batchInfo.processedSoFar + parsedData.evaluations.length,
+            totalRecords: batchInfo.totalRecords,
+            currentBatch: {
+              evaluations: parsedData.evaluations.length,
+              agents: parsedData.agents.length,
+            },
+          },
         },
-      },
-      { headers: corsHeaders }
-    )
+        { headers: corsHeaders }
+      )
+    } else {
+      // 일반 처리
+      console.log(`[API] Synced ${parsedData.evaluations.length} evaluations, ${parsedData.agents.length} agents`)
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: `${parsedData.evaluations.length}건의 평가 데이터가 동기화되었습니다.`,
+          timestamp: new Date().toISOString(),
+          summary: {
+            agents: parsedData.agents.length,
+            evaluations: parsedData.evaluations.length,
+          },
+        },
+        { headers: corsHeaders }
+      )
+    }
   } catch (error) {
     console.error("[API] Sync error:", error)
     const errorMessage = error instanceof Error ? error.message : String(error)
