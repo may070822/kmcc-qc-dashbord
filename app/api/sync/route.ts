@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     let parsedData
     
     // 형식 1: Apps Script 형식 { yonsan: [...], gwangju: [...] } (배치 지원)
-    if (data.yonsan || data.gwangju) {
+    if (data.hasOwnProperty('yonsan') || data.hasOwnProperty('gwangju')) {
       const batchNumber = data.batch || 0
       const isLast = data.isLast === true
       const processedSoFar = data.processedSoFar || 0
@@ -48,6 +48,27 @@ export async function POST(request: NextRequest) {
       
       const yonsanRecords = Array.isArray(data.yonsan) ? data.yonsan : []
       const gwangjuRecords = Array.isArray(data.gwangju) ? data.gwangju : []
+      
+      console.log(`[API] 배치 데이터: 용산 ${yonsanRecords.length}건, 광주 ${gwangjuRecords.length}건`)
+      
+      // 빈 배치도 허용 (배치 처리 중일 수 있음)
+      if (yonsanRecords.length === 0 && gwangjuRecords.length === 0) {
+        return NextResponse.json(
+          {
+            success: true,
+            message: `배치 ${batchNumber}: 빈 배치 (스킵)`,
+            timestamp: new Date().toISOString(),
+            batch: {
+              batchNumber,
+              isLast,
+              processedSoFar,
+              totalRecords,
+              currentBatch: { evaluations: 0, agents: 0 },
+            },
+          },
+          { headers: corsHeaders }
+        )
+      }
       
       parsedData = parseAppsScriptData(yonsanRecords, gwangjuRecords)
       
