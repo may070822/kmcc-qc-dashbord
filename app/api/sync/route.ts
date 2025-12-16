@@ -54,7 +54,12 @@ export async function POST(request: NextRequest) {
     
     // 형식 1: Apps Script 형식 { yonsan: [...], gwangju: [...] } (배치 지원)
     // data가 객체이고 yonsan 또는 gwangju 속성이 있는지 확인
-    if (data && typeof data === 'object' && !Array.isArray(data) && ('yonsan' in data || 'gwangju' in data)) {
+    const hasYonsan = data && typeof data === 'object' && !Array.isArray(data) && 'yonsan' in data
+    const hasGwangju = data && typeof data === 'object' && !Array.isArray(data) && 'gwangju' in data
+    
+    console.log(`[API] 데이터 검증: hasYonsan=${hasYonsan}, hasGwangju=${hasGwangju}, isArray=${Array.isArray(data)}, type=${typeof data}`)
+    
+    if (hasYonsan || hasGwangju) {
       const batchNumber = data.batch || 0
       const isLast = data.isLast === true
       const processedSoFar = data.processedSoFar || 0
