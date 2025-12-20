@@ -249,10 +249,10 @@ export async function getDashboardStats(targetDate?: string) {
       .where('date', '==', queryDate)
       .get()
 
-    const todayEvaluations = evaluationsSnapshot.docs.map(doc => doc.data())
+    const dateEvaluations = evaluationsSnapshot.docs.map(doc => doc.data())
     
-    console.log(`[Firebase] ${queryDate} 날짜의 평가 데이터: ${todayEvaluations.length}건`)
-    console.log(`[Firebase] 센터별 분포: 용산 ${todayEvaluations.filter((e: any) => e.center === '용산').length}건, 광주 ${todayEvaluations.filter((e: any) => e.center === '광주').length}건`)
+    console.log(`[Firebase] ${queryDate} 날짜의 평가 데이터: ${dateEvaluations.length}건`)
+    console.log(`[Firebase] 센터별 분포: 용산 ${dateEvaluations.filter((e: any) => e.center === '용산').length}건, 광주 ${dateEvaluations.filter((e: any) => e.center === '광주').length}건`)
 
     // 통계 계산
     const totalEvaluations = dateEvaluations.length

@@ -28,11 +28,14 @@ export async function GET(request: Request) {
   const days = parseInt(searchParams.get("days") || "14")
 
   try {
+    console.log(`[API] Data request: type=${type}, date=${date}`)
     let result
 
     switch (type) {
       case "dashboard":
+        console.log(`[API] Fetching dashboard stats for date: ${date || 'yesterday'}`)
         result = await getDashboardStats(date)
+        console.log(`[API] Dashboard stats result:`, result)
         break
 
       case "centers":
