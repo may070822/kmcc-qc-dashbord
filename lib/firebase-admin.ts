@@ -252,6 +252,7 @@ export async function getDashboardStats(targetDate?: string) {
       const month = String(yesterday.getUTCMonth() + 1).padStart(2, '0')
       const day = String(yesterday.getUTCDate()).padStart(2, '0')
       queryDate = `${year}-${month}-${day}`
+      console.log(`[Firebase] 어제 날짜 계산: ${queryDate} (KST 기준)`)
     }
     
     // 날짜 형식이 다를 수 있으므로 정규화
