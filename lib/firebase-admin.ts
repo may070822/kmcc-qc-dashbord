@@ -223,6 +223,8 @@ export async function getDashboardStats(targetDate?: string) {
   }
 
   try {
+    // 변수 초기화 (스코프 문제 방지)
+    let dateEvaluations: any[] = []
     // 상담사 수 조회
     const agentsSnapshot = await db.collection('agents').get()
     const agents = agentsSnapshot.docs.map(doc => doc.data())
@@ -261,7 +263,7 @@ export async function getDashboardStats(targetDate?: string) {
       .where('date', '==', queryDate)
       .get()
 
-    const dateEvaluations = evaluationsSnapshot.docs.map(doc => doc.data())
+    dateEvaluations = evaluationsSnapshot.docs.map(doc => doc.data())
     
     console.log(`[Firebase] ${queryDate} 날짜의 평가 데이터: ${dateEvaluations.length}건`)
     console.log(`[Firebase] 센터별 분포: 용산 ${dateEvaluations.filter((e: any) => e.center === '용산').length}건, 광주 ${dateEvaluations.filter((e: any) => e.center === '광주').length}건`)
