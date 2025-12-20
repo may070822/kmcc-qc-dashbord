@@ -91,11 +91,21 @@ export function Dashboard({ onNavigateToFocus }: DashboardProps) {
 
       {/* 에러 표시 (클라이언트에서만) */}
       {isMounted && error && (
-        <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm">
-          데이터 로드 오류: {error}
+        <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm mb-4">
+          <strong>데이터 로드 오류:</strong> {error}
           <button onClick={refresh} className="ml-2 underline">
             다시 시도
           </button>
+        </div>
+      )}
+      
+      {/* 디버깅 정보 (개발 모드) */}
+      {isMounted && process.env.NODE_ENV === 'development' && (
+        <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-md text-xs mb-4">
+          <strong>디버그:</strong> 로딩={loading ? 'true' : 'false'}, 
+          에러={error || '없음'}, 
+          통계={stats ? '있음' : '없음'}, 
+          센터={centerStats.length}개
         </div>
       )}
 

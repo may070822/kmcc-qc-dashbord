@@ -68,16 +68,31 @@ export function useDashboardData(selectedDate?: string) {
         trendRes.json(),
       ])
 
+      // 응답 로깅
+      console.log('[Dashboard] Stats response:', statsData)
+      console.log('[Dashboard] Centers response:', centersData)
+      console.log('[Dashboard] Trend response:', trendDataRes)
+
       if (statsData.success && statsData.data) {
+        console.log('[Dashboard] Stats data:', statsData.data)
         setStats(statsData.data)
+      } else {
+        console.warn('[Dashboard] Stats fetch failed:', statsData)
+        setError(statsData.error || '데이터를 불러올 수 없습니다')
       }
 
       if (centersData.success && centersData.data) {
+        console.log('[Dashboard] Centers data:', centersData.data)
         setCenterStats(centersData.data)
+      } else {
+        console.warn('[Dashboard] Centers fetch failed:', centersData)
       }
 
       if (trendDataRes.success && trendDataRes.data) {
+        console.log('[Dashboard] Trend data:', trendDataRes.data)
         setTrendData(trendDataRes.data)
+      } else {
+        console.warn('[Dashboard] Trend fetch failed:', trendDataRes)
       }
     } catch (err) {
       console.error("Dashboard data fetch error:", err)
