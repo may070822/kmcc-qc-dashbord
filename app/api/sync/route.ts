@@ -53,30 +53,67 @@ export async function POST(request: NextRequest) {
     // 데이터 형식 확인 및 처리
     let parsedData
 
-    // 형식 1: Apps Script 형식 { yonsan: [...], gwangju: [...] } (배치 지원)
-    // data가 객체이고 yonsan 또는 gwangju 속성이 있는지 확인
+    // 형식 1: 새 데이터 구조 { data: [...], batch: ... } (agg_agent_daily 시트)
     const isObject = data && typeof data === 'object' && !Array.isArray(data)
-    
-    // 더 관대한 검증: 속성 이름이 있으면 배열이든 아니든 허용
+    const hasDataArray = isObject && 'data' in data && Array.isArray(data.data)
+    const hasBatch = isObject && 'batch' in data
+
+    // 형식 2: 기존 Apps Script 형식 { yonsan: [...], gwangju: [...] } (배치 지원)
     const hasYonsan = isObject && 'yonsan' in data
     const hasGwangju = isObject && 'gwangju' in data
 
-    console.log(`[API] 데이터 검증: isObject=${isObject}, hasYonsan=${hasYonsan}, hasGwangju=${hasGwangju}, isArray=${Array.isArray(data)}, type=${typeof data}`)
+    console.log(`[API] 데이터 검증: isObject=${isObject}, hasDataArray=${hasDataArray}, hasBatch=${hasBatch}, hasYonsan=${hasYonsan}, hasGwangju=${hasGwangju}`)
     if (isObject) {
       console.log(`[API] 데이터 키: ${Object.keys(data).join(', ')}`)
-      console.log(`[API] yonsan 존재: ${hasYonsan}, 타입: ${typeof data.yonsan}, 값: ${data.yonsan ? (Array.isArray(data.yonsan) ? `배열(${data.yonsan.length}개)` : String(data.yonsan).substring(0, 50)) : 'undefined'}`)
-      console.log(`[API] gwangju 존재: ${hasGwangju}, 타입: ${typeof data.gwangju}, 값: ${data.gwangju ? (Array.isArray(data.gwangju) ? `배열(${data.gwangju.length}개)` : String(data.gwangju).substring(0, 50)) : 'undefined'}`)
-      console.log(`[API] 전체 데이터 샘플: ${JSON.stringify(data).substring(0, 500)}`)
     }
 
-    // yonsan 또는 gwangju 속성이 있으면 Apps Script 형식으로 처리
-    if (isObject && (hasYonsan || hasGwangju)) {
+    // 새 데이터 구조 처리 (agg_agent_daily)
+    if (isObject && hasDataArray) {
+      const batchNumber = data.batch || 0
+      const isLast = data.isLast === true
+      const processedSoFar = data.processedSoFar || 0
+      const totalRecords = data.totalRecords || 0
+      const records = Array.isArray(data.data) ? data.data : []
+
+      console.log(`[API] 새 데이터 구조 배치 수신: 배치 ${batchNumber}, ${records.length}건`)
+
+      if (records.length === 0) {
+        return NextResponse.json(
+          {
+            success: true,
+            message: `배치 ${batchNumber}: 빈 배치 (스킵)`,
+            timestamp: new Date().toISOString(),
+            batch: {
+              batchNumber,
+              isLast,
+              processedSoFar,
+              totalRecords,
+              currentBatch: { evaluations: 0, agents: 0 },
+            },
+          },
+          { headers: corsHeaders }
+        )
+      }
+
+      parsedData = parseNewStructureData(records)
+
+      // 배치 정보 포함
+      ;(parsedData as any).batchInfo = {
+        batchNumber,
+        isLast,
+        processedSoFar,
+        totalRecords,
+        currentBatchSize: records.length,
+      }
+    }
+    // 기존 Apps Script 형식 처리
+    else if (isObject && (hasYonsan || hasGwangju)) {
       const batchNumber = data.batch || 0
       const isLast = data.isLast === true
       const processedSoFar = data.processedSoFar || 0
       const totalRecords = data.totalRecords || 0
 
-      console.log(`[API] Apps Script 배치 데이터 수신: 배치 ${batchNumber}, ${isLast ? '마지막' : '진행중'}`)
+      console.log(`[API] 기존 Apps Script 배치 데이터 수신: 배치 ${batchNumber}, ${isLast ? '마지막' : '진행중'}`)
 
       const yonsanRecords = Array.isArray(data.yonsan) ? data.yonsan : []
       const gwangjuRecords = Array.isArray(data.gwangju) ? data.gwangju : []
