@@ -30,16 +30,34 @@ function syncData() {
     
     // agg_agent_daily 시트에서 데이터 읽기
     const dailyData = readDailySheetData();
+    
+    // 데이터 유효성 검사
+    if (!dailyData || !Array.isArray(dailyData)) {
+      throw new Error('데이터를 읽을 수 없습니다. dailyData가 배열이 아닙니다.');
+    }
+    
     Logger.log(`[v0] 일별 데이터: ${dailyData.length}건`);
+    
+    if (dailyData.length === 0) {
+      Logger.log('[v0] 경고: 읽은 데이터가 없습니다.');
+      return;
+    }
     
     // 배치 처리로 전송
     const BATCH_SIZE = 1000;
     const totalBatches = Math.ceil(dailyData.length / BATCH_SIZE);
     
+    Logger.log(`[v0] 총 ${totalBatches}개 배치로 전송 예정`);
+    
     for (let i = 0; i < totalBatches; i++) {
       const startIdx = i * BATCH_SIZE;
       const endIdx = Math.min(startIdx + BATCH_SIZE, dailyData.length);
       const batch = dailyData.slice(startIdx, endIdx);
+      
+      if (!batch || batch.length === 0) {
+        Logger.log(`[v0] 배치 ${i + 1}이 비어있어 스킵합니다.`);
+        continue;
+      }
       
       const batchNumber = i + 1;
       const isLast = (i === totalBatches - 1);
@@ -239,15 +257,25 @@ function readDailySheetData() {
  */
 function sendToWebApp(payload) {
   try {
+    // 페이로드 유효성 검사
+    if (!payload) {
+      throw new Error('페이로드가 없습니다.');
+    }
+    
+    const payloadString = JSON.stringify(payload);
+    if (!payloadString) {
+      throw new Error('페이로드를 JSON으로 변환할 수 없습니다.');
+    }
+    
     const options = {
       method: 'post',
       contentType: 'application/json',
-      payload: JSON.stringify(payload),
+      payload: payloadString,
       muteHttpExceptions: true
     };
     
     Logger.log('[v0] 웹앱 URL: ' + WEBAPP_URL);
-    Logger.log('[v0] 페이로드 크기: ' + JSON.stringify(payload).length + ' bytes');
+    Logger.log('[v0] 페이로드 크기: ' + payloadString.length + ' bytes');
     
     const response = UrlFetchApp.fetch(WEBAPP_URL, options);
     const responseCode = response.getResponseCode();
