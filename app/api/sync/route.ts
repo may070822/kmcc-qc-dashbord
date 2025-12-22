@@ -65,10 +65,14 @@ export async function POST(request: NextRequest) {
     console.log(`[API] 데이터 검증: isObject=${isObject}, hasDataArray=${hasDataArray}, hasBatch=${hasBatch}, hasYonsan=${hasYonsan}, hasGwangju=${hasGwangju}`)
     if (isObject) {
       console.log(`[API] 데이터 키: ${Object.keys(data).join(', ')}`)
+      if ('data' in data) {
+        console.log(`[API] data 타입: ${typeof data.data}, isArray: ${Array.isArray(data.data)}, length: ${Array.isArray(data.data) ? data.data.length : 'N/A'}`)
+      }
     }
 
     // 새 데이터 구조 처리 (agg_agent_daily)
     if (isObject && hasDataArray) {
+      console.log(`[API] 새 데이터 구조 감지: data 배열 길이=${data.data.length}`)
       const batchNumber = data.batch || 0
       const isLast = data.isLast === true
       const processedSoFar = data.processedSoFar || 0
