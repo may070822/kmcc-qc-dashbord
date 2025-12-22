@@ -111,33 +111,36 @@ export async function POST(request: NextRequest) {
 
         console.log(`[API] 새 데이터 구조 배치 수신: 배치 ${batchNumber}, ${records.length}건`)
 
-      if (records.length === 0) {
-        return NextResponse.json(
-          {
-            success: true,
-            message: `배치 ${batchNumber}: 빈 배치 (스킵)`,
-            timestamp: new Date().toISOString(),
-            batch: {
-              batchNumber,
-              isLast,
-              processedSoFar,
-              totalRecords,
-              currentBatch: { evaluations: 0, agents: 0 },
+        if (records.length === 0) {
+          return NextResponse.json(
+            {
+              success: true,
+              message: `배치 ${batchNumber}: 빈 배치 (스킵)`,
+              timestamp: new Date().toISOString(),
+              batch: {
+                batchNumber,
+                isLast,
+                processedSoFar,
+                totalRecords,
+                currentBatch: { evaluations: 0, agents: 0 },
+              },
             },
-          },
-          { headers: corsHeaders }
-        )
-      }
+            { headers: corsHeaders }
+          )
+        }
 
-      parsedData = parseNewStructureData(records)
+        parsedData = parseNewStructureData(records)
 
-      // 배치 정보 포함
-      ;(parsedData as any).batchInfo = {
-        batchNumber,
-        isLast,
-        processedSoFar,
-        totalRecords,
-        currentBatchSize: records.length,
+        // 배치 정보 포함
+        ;(parsedData as any).batchInfo = {
+          batchNumber,
+          isLast,
+          processedSoFar,
+          totalRecords,
+          currentBatchSize: records.length,
+        }
+      } else {
+        console.log(`[API] 새 데이터 구조이지만 data가 배열이 아니거나 비어있음: dataType=${typeof data.data}, isArray=${Array.isArray(data.data)}, length=${Array.isArray(data.data) ? data.data.length : 'N/A'}`)
       }
     }
     // 기존 Apps Script 형식 처리
