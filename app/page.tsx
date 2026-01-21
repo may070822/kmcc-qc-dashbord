@@ -9,17 +9,26 @@ import { FocusManagement } from "@/components/qc/focus"
 import { AnalyticsReports } from "@/components/qc/reports"
 import { GoalManagement } from "@/components/qc/goals"
 import { SettingsPage } from "@/components/qc/settings"
+import { Predictions } from "@/components/qc/predictions"
 import { cn } from "@/lib/utils"
 
 export default function QCManagementApp() {
   const [currentTab, setCurrentTab] = useState("dashboard")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
+  const [searchDate, setSearchDate] = useState(new Date().toISOString().split("T")[0])
   const [lastUpdated, setLastUpdated] = useState(new Date().toLocaleTimeString("ko-KR"))
 
   const handleRefresh = useCallback(() => {
     setLastUpdated(new Date().toLocaleTimeString("ko-KR"))
-  }, [])
+    // Trigger search with current date
+    setSearchDate(selectedDate)
+  }, [selectedDate])
+
+  const handleSearch = useCallback(() => {
+    setSearchDate(selectedDate)
+    setLastUpdated(new Date().toLocaleTimeString("ko-KR"))
+  }, [selectedDate])
 
   const handleNavigateToFocus = useCallback(() => {
     setCurrentTab("focus")
@@ -28,7 +37,9 @@ export default function QCManagementApp() {
   const renderContent = () => {
     switch (currentTab) {
       case "dashboard":
-        return <Dashboard onNavigateToFocus={handleNavigateToFocus} />
+        return <Dashboard onNavigateToFocus={handleNavigateToFocus} selectedDate={searchDate} />
+      case "predictions":
+        return <Predictions onNavigateToFocus={handleNavigateToFocus} />
       case "agents":
         return <AgentAnalysis />
       case "focus":
@@ -59,6 +70,7 @@ export default function QCManagementApp() {
           selectedDate={selectedDate}
           onDateChange={setSelectedDate}
           onRefresh={handleRefresh}
+          onSearch={handleSearch}
           lastUpdated={lastUpdated}
         />
 

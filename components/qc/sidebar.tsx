@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Users, AlertTriangle, FileText, Settings, Building2, ChevronLeft, Bell } from "lucide-react"
+import { LayoutDashboard, Users, AlertTriangle, FileText, Settings, Building2, ChevronLeft, Bell, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -15,6 +15,7 @@ interface SidebarProps {
 
 const navItems = [
   { id: "dashboard", label: "대시보드", icon: LayoutDashboard },
+  { id: "predictions", label: "예측", icon: TrendingUp },
   { id: "agents", label: "상담사 분석", icon: Users },
   { id: "focus", label: "집중관리", icon: AlertTriangle },
   { id: "reports", label: "분석 리포트", icon: FileText },

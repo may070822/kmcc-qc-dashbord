@@ -18,9 +18,10 @@ import { Loader2 } from "lucide-react"
 
 interface DashboardProps {
   onNavigateToFocus: () => void
+  selectedDate?: string
 }
 
-export function Dashboard({ onNavigateToFocus }: DashboardProps) {
+export function Dashboard({ onNavigateToFocus, selectedDate }: DashboardProps) {
   const [selectedCenter, setSelectedCenter] = useState("all")
   const [selectedService, setSelectedService] = useState("all")
   const [selectedChannel, setSelectedChannel] = useState("all")
@@ -32,8 +33,8 @@ export function Dashboard({ onNavigateToFocus }: DashboardProps) {
     setIsMounted(true)
   }, [])
 
-  // Firebase에서 실제 데이터 가져오기
-  const { stats, centerStats, trendData, loading, error, refresh } = useDashboardData()
+  // Firebase에서 실제 데이터 가져오기 (selectedDate 전달)
+  const { stats, centerStats, trendData, loading, error, refresh } = useDashboardData(selectedDate)
 
   // 로딩 중이거나 데이터가 없으면 기본값 사용
   const dashboardStats = stats || defaultStats
@@ -75,6 +76,25 @@ export function Dashboard({ onNavigateToFocus }: DashboardProps) {
   const filteredCenters = selectedCenter === "all"
     ? centerData
     : centerData.filter((c) => c.name === selectedCenter)
+
+  // 센터별 오류율 데이터 추출
+  const yongsanStats = centerStats.find(c => c.name === "용산")
+  const gwangjuStats = centerStats.find(c => c.name === "광주")
+
+  const attitudeErrorByCenter = (yongsanStats || gwangjuStats) ? {
+    yongsan: yongsanStats?.attitudeErrorRate ?? 0,
+    gwangju: gwangjuStats?.attitudeErrorRate ?? 0
+  } : undefined
+
+  const consultErrorByCenter = (yongsanStats || gwangjuStats) ? {
+    yongsan: yongsanStats?.businessErrorRate ?? 0,
+    gwangju: gwangjuStats?.businessErrorRate ?? 0
+  } : undefined
+
+  const overallErrorByCenter = (yongsanStats || gwangjuStats) ? {
+    yongsan: yongsanStats?.errorRate ?? 0,
+    gwangju: gwangjuStats?.errorRate ?? 0
+  } : undefined
 
   // 서버 렌더링 시에는 로딩 표시를 하지 않음 (hydration 안전)
   const showLoading = isMounted && loading
@@ -123,6 +143,9 @@ export function Dashboard({ onNavigateToFocus }: DashboardProps) {
         overallErrorRate={dashboardStats.overallErrorRate}
         overallErrorTrend={0}
         onWatchlistClick={onNavigateToFocus}
+        attitudeErrorByCenter={attitudeErrorByCenter}
+        consultErrorByCenter={consultErrorByCenter}
+        overallErrorByCenter={overallErrorByCenter}
       />
 
       {/* 목표 달성 현황 전광판 */}
