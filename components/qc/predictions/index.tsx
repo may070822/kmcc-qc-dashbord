@@ -349,7 +349,7 @@ export function Predictions({ onNavigateToFocus }: PredictionsProps) {
     center: selectedCenter !== "전체" ? selectedCenter : undefined,
   })
   
-  const { data: agentsData } = useAgents({
+  const { data: agentsData, loading: agentsLoading, error: agentsError } = useAgents({
     center: selectedCenter !== "전체" ? selectedCenter : undefined,
     service: selectedService !== "전체" ? selectedService : undefined,
     channel: selectedChannel !== "전체" ? selectedChannel : undefined,
@@ -814,6 +814,23 @@ export function Predictions({ onNavigateToFocus }: PredictionsProps) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {agentsLoading && (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                      <span>상담사 데이터 로딩 중...</span>
+                    </div>
+                  )}
+                  {agentsError && (
+                    <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm mb-4">
+                      <strong>데이터 로드 오류:</strong> {agentsError}
+                    </div>
+                  )}
+                  {!agentsLoading && !agentsError && filteredAgentPredictions.length === 0 && (
+                    <div className="text-center py-8 text-sm text-muted-foreground">
+                      상담사 데이터가 없습니다.
+                    </div>
+                  )}
+                  {!agentsLoading && !agentsError && filteredAgentPredictions.length > 0 && (
                   <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
