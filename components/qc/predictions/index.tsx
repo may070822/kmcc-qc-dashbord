@@ -138,7 +138,16 @@ function convertToAgentPredictions(agents: any[], predictionsData?: any[]): Agen
     
     // 실제 주요 오류 항목 사용 (topErrors가 있으면 사용, 없으면 빈 배열)
     // topErrors는 이미 AgentErrorInfo 형태 (name, count, rate 포함)
-    const mainErrors = agent.topErrors || []
+    const mainErrors = (agent.topErrors || []).map((err: any) => {
+      // AgentErrorInfo 형태인지 확인
+      if (typeof err === 'string') {
+        return { name: err, rate: 0 }
+      }
+      return {
+        name: err.name || err,
+        rate: err.rate || 0,
+      }
+    })
     
     return {
       agentId: agent.id,
@@ -356,8 +365,17 @@ export function Predictions({ onNavigateToFocus }: PredictionsProps) {
   
   const agentPredictions = useMemo(() => {
     if (agentsData && agentsData.length > 0) {
-      return convertToAgentPredictions(agentsData, predictionsData)
+      // 실제 상담사 데이터 사용
+      const predictions = convertToAgentPredictions(agentsData, predictionsData)
+      // 위험도와 오류율 기준으로 정렬 (위험도 우선, 그 다음 오류율)
+      return predictions.sort((a, b) => {
+        const riskOrder = { critical: 0, high: 1, medium: 2, low: 3 }
+        const riskDiff = riskOrder[a.riskLevel] - riskOrder[b.riskLevel]
+        if (riskDiff !== 0) return riskDiff
+        return b.totalRate - a.totalRate
+      })
     }
+    // 데이터가 없으면 빈 배열 반환 (목업 데이터 사용 안 함)
     return []
   }, [agentsData, predictionsData])
   
@@ -834,11 +852,16 @@ export function Predictions({ onNavigateToFocus }: PredictionsProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {p.mainErrors.slice(0, 2).map((err, j) => (
-                            <Badge key={j} variant="outline" className="text-xs">
-                              {err.name} ({err.rate}%)
-                            </Badge>
-                          ))}
+                          {p.mainErrors && p.mainErrors.length > 0 ? (
+                            p.mainErrors.slice(0, 2).map((err: any, j: number) => (
+                              <Badge key={j} variant="outline" className="text-xs">
+                                {typeof err === 'string' ? err : err.name || '오류'}
+                                {typeof err === 'object' && err.rate !== undefined && ` (${err.rate.toFixed(1)}%)`}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
