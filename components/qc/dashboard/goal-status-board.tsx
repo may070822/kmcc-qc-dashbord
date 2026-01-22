@@ -1,9 +1,10 @@
 "use client"
 
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { Target, TrendingDown, TrendingUp, CheckCircle, AlertTriangle, Calendar } from "lucide-react"
+import { Target, TrendingDown, TrendingUp, CheckCircle, AlertTriangle, Calendar, Loader2 } from "lucide-react"
 
 interface GoalStatus {
   id: string
@@ -18,82 +19,115 @@ interface GoalStatus {
   endDate: string
 }
 
-const goals: GoalStatus[] = [
-  {
-    id: "1",
-    title: "12월 전체 상담태도 목표",
-    center: "전체",
-    type: "attitude",
-    targetRate: 2.0,
-    currentRate: 1.85,
-    status: "achieved",
-    progress: 50,
-    startDate: "2024-12-01",
-    endDate: "2024-12-31",
-  },
-  {
-    id: "2",
-    title: "12월 전체 오상담/오처리 목표",
-    center: "전체",
-    type: "counseling",
-    targetRate: 3.0,
-    currentRate: 2.95,
-    status: "on-track",
-    progress: 50,
-    startDate: "2024-12-01",
-    endDate: "2024-12-31",
-  },
-  {
-    id: "3",
-    title: "12월 전체 품질 합계 목표",
-    center: "전체",
-    type: "total",
-    targetRate: 3.0,
-    currentRate: 2.85,
-    status: "achieved",
-    progress: 50,
-    startDate: "2024-12-01",
-    endDate: "2024-12-31",
-  },
-  {
-    id: "4",
-    title: "12월 용산 상담태도",
-    center: "용산",
-    type: "attitude",
-    targetRate: 2.0,
-    currentRate: 1.65,
-    status: "achieved",
-    progress: 50,
-    startDate: "2024-12-01",
-    endDate: "2024-12-31",
-  },
-  {
-    id: "5",
-    title: "12월 용산 오상담/오처리",
-    center: "용산",
-    type: "counseling",
-    targetRate: 2.8,
-    currentRate: 2.75,
-    status: "on-track",
-    progress: 50,
-    startDate: "2024-12-01",
-    endDate: "2024-12-31",
-  },
-  {
-    id: "6",
-    title: "12월 광주 상담태도",
-    center: "광주",
-    type: "attitude",
-    targetRate: 2.2,
-    currentRate: 2.45,
-    status: "at-risk",
-    progress: 50,
-    startDate: "2024-12-01",
-    endDate: "2024-12-31",
-  },
-]
-
 export function GoalStatusBoard() {
+  const [goals, setGoals] = useState<GoalStatus[]>([])
+  const [goalCurrentRates, setGoalCurrentRates] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  
+  // 현재 월 표시
+  const currentMonth = useMemo(() => {
+    const now = new Date()
+    return `${now.getFullYear()}년 ${now.getMonth() + 1}월`
+  }, [])
+  
+  // 목표 데이터 조회
+  useEffect(() => {
+    const fetchGoals = async () => {
+      setLoading(true)
+      try {
+        // periodType 필터를 제거하고 currentMonth만 사용 (연간 목표도 현재 월과 겹치면 표시)
+        const response = await fetch('/api/goals?isActive=true&currentMonth=true')
+        const result = await response.json()
+        
+        console.log('[GoalStatusBoard] Goals fetch result:', result)
+        
+        if (result.success && result.data) {
+          const goalsData = result.data
+          console.log('[GoalStatusBoard] Goals data:', goalsData)
+          
+          // 목표별 현재 실적 조회
+          const rates: Record<string, number> = {}
+          for (const goal of goalsData) {
+            try {
+              const params = new URLSearchParams()
+              params.append("action", "currentRate")
+              params.append("goalId", goal.id)
+              params.append("goalType", goal.type)
+              if (goal.center) params.append("center", goal.center)
+              params.append("startDate", goal.periodStart)
+              params.append("endDate", goal.periodEnd)
+              
+              const rateResponse = await fetch(`/api/goals?${params.toString()}`)
+              const rateResult = await rateResponse.json()
+              
+              if (rateResult.success && rateResult.data) {
+                rates[goal.id] = rateResult.data.currentRate
+              }
+            } catch (err) {
+              console.error(`Failed to fetch current rate for goal ${goal.id}:`, err)
+            }
+          }
+          
+          setGoalCurrentRates(rates)
+          
+          // GoalStatus 형식으로 변환
+          const today = new Date()
+          const goalStatuses: GoalStatus[] = goalsData.map((goal: any) => {
+            const goalStart = new Date(goal.periodStart)
+            const goalEnd = new Date(goal.periodEnd)
+            const totalDays = Math.ceil((goalEnd.getTime() - goalStart.getTime()) / (1000 * 60 * 60 * 24))
+            const passedDays = Math.ceil((today.getTime() - goalStart.getTime()) / (1000 * 60 * 60 * 24))
+            const progress = Math.min(100, Math.max(0, Math.round((passedDays / totalDays) * 100)))
+            
+            const currentErrorRate = rates[goal.id] ?? (goal.targetRate * 0.92)
+            
+            // 상태 판정
+            let status: GoalStatus["status"] = "on-track"
+            if (currentErrorRate <= goal.targetRate * 0.9) {
+              status = "achieved"
+            } else if (currentErrorRate <= goal.targetRate) {
+              status = "on-track"
+            } else if (currentErrorRate > goal.targetRate * 1.1) {
+              status = "missed"
+            } else {
+              status = "at-risk"
+            }
+            
+            // goal.type이 '태도' | '오상담/오처리' | '합계' 형식일 수 있으므로 변환
+            let goalType: "attitude" | "counseling" | "total" = "total";
+            if (goal.type === "태도" || goal.type === "attitude") {
+              goalType = "attitude";
+            } else if (goal.type === "오상담/오처리" || goal.type === "ops") {
+              goalType = "counseling";
+            } else if (goal.type === "합계" || goal.type === "total") {
+              goalType = "total";
+            }
+            
+            return {
+              id: goal.id,
+              title: goal.name,
+              center: goal.center || "전체",
+              type: goalType,
+              targetRate: goal.targetRate,
+              currentRate: currentErrorRate,
+              status,
+              progress,
+              startDate: goal.periodStart,
+              endDate: goal.periodEnd,
+            }
+          })
+          
+          setGoals(goalStatuses)
+        }
+      } catch (err) {
+        console.error('Failed to fetch goals:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchGoals()
+  }, [])
   const getStatusConfig = (status: string) => {
     switch (status) {
       case "achieved":
@@ -167,11 +201,21 @@ export function GoalStatusBoard() {
             <Target className="h-5 w-5 text-[#1e3a5f]" />
             목표 달성 현황
           </h3>
-          <span className="text-xs text-muted-foreground">2024년 12월</span>
+          <span className="text-xs text-muted-foreground">{currentMonth}</span>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {goals.map((goal) => {
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            <span className="text-sm text-muted-foreground">데이터 로딩 중...</span>
+          </div>
+        ) : goals.length === 0 ? (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            현재 월의 목표 데이터가 없습니다.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {goals.map((goal) => {
             const statusConfig = getStatusConfig(goal.status)
             const StatusIcon = statusConfig.icon
             const achievementRate =
@@ -243,7 +287,8 @@ export function GoalStatusBoard() {
               </div>
             )
           })}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

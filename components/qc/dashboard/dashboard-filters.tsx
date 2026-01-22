@@ -1,6 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { CalendarIcon, Search } from "lucide-react"
+import { format } from "date-fns"
+import { ko } from "date-fns/locale"
+import { cn } from "@/lib/utils"
 import { serviceGroups, channelTypes, tenureCategories } from "@/lib/mock-data"
 
 interface DashboardFiltersProps {
@@ -12,6 +20,10 @@ interface DashboardFiltersProps {
   setSelectedChannel: (value: string) => void
   selectedTenure: string
   setSelectedTenure: (value: string) => void
+  startDate?: string
+  endDate?: string
+  onDateChange?: (startDate: string, endDate: string) => void
+  onSearch?: () => void
 }
 
 export function DashboardFilters({
@@ -23,7 +35,25 @@ export function DashboardFilters({
   setSelectedChannel,
   selectedTenure,
   setSelectedTenure,
+  startDate: propStartDate,
+  endDate: propEndDate,
+  onDateChange,
+  onSearch,
 }: DashboardFiltersProps) {
+  // 기본값: 전날
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const defaultDate = yesterday.toISOString().split('T')[0]
+  
+  const [startDate, setStartDate] = useState<Date | undefined>(
+    propStartDate ? new Date(propStartDate) : yesterday
+  )
+  const [endDate, setEndDate] = useState<Date | undefined>(
+    propEndDate ? new Date(propEndDate) : yesterday
+  )
+  const [startDateOpen, setStartDateOpen] = useState(false)
+  const [endDateOpen, setEndDateOpen] = useState(false)
+  
   // 센터에 따른 서비스 목록
   const getServices = () => {
     if (selectedCenter === "all") {
@@ -37,9 +67,95 @@ export function DashboardFilters({
     setSelectedCenter(value)
     setSelectedService("all")
   }
+  
+  // 날짜 변경 핸들러
+  const handleStartDateSelect = (date: Date | undefined) => {
+    setStartDate(date)
+    setStartDateOpen(false)
+    if (date && onDateChange) {
+      const startStr = date.toISOString().split('T')[0]
+      const endStr = endDate ? endDate.toISOString().split('T')[0] : startStr
+      onDateChange(startStr, endStr)
+    }
+  }
+  
+  const handleEndDateSelect = (date: Date | undefined) => {
+    setEndDate(date)
+    setEndDateOpen(false)
+    if (date && onDateChange) {
+      const startStr = startDate ? startDate.toISOString().split('T')[0] : defaultDate
+      const endStr = date.toISOString().split('T')[0]
+      onDateChange(startStr, endStr)
+    }
+  }
+  
+  // 조회 버튼 클릭 - 모든 필터 적용
+  const handleSearch = () => {
+    // 날짜 범위 업데이트
+    if (onDateChange) {
+      const startStr = startDate ? startDate.toISOString().split('T')[0] : defaultDate
+      const endStr = endDate ? endDate.toISOString().split('T')[0] : defaultDate
+      onDateChange(startStr, endStr)
+    }
+    
+    // 조회 핸들러 호출 (모든 필터 정보는 이미 상위 컴포넌트의 state에 반영됨)
+    if (onSearch) {
+      onSearch()
+    }
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-lg border">
+      {/* 날짜 선택기 */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-gray-600">기간</span>
+        <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[140px] justify-start text-left font-normal bg-white",
+                !startDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {startDate ? format(startDate, "yyyy-MM-dd", { locale: ko }) : "시작일"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={startDate}
+              onSelect={handleStartDateSelect}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+        <span className="text-sm text-gray-500">~</span>
+        <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[140px] justify-start text-left font-normal bg-white",
+                !endDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {endDate ? format(endDate, "yyyy-MM-dd", { locale: ko }) : "종료일"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={endDate}
+              onSelect={handleEndDateSelect}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+      
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-gray-600">센터</span>
         <Select value={selectedCenter} onValueChange={handleCenterChange}>
@@ -103,6 +219,18 @@ export function DashboardFilters({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* 조회 버튼 - 가장 우측에 배치 */}
+      <div className="ml-auto">
+        <Button 
+          onClick={handleSearch} 
+          size="sm" 
+          className="bg-[#1e3a5f] text-white hover:bg-[#2d4a6f] min-w-[100px]"
+        >
+          <Search className="mr-2 h-4 w-4" />
+          Q 조회
+        </Button>
       </div>
     </div>
   )

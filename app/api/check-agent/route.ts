@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAgents } from '@/lib/bigquery';
+import { checkAgentExists } from '@/lib/bigquery';
 
 // CORS 헤더
 const corsHeaders = {
@@ -12,31 +12,20 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
-// GET /api/agents?center=용산&service=택시&channel=유선&tenure=3개월%20이상&month=2026-01&date=2026-01-20
+// GET /api/check-agent?name=이영희&id=AGT101
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   
-  const center = searchParams.get('center') || undefined;
-  const service = searchParams.get('service') || undefined;
-  const channel = searchParams.get('channel') || undefined;
-  const tenure = searchParams.get('tenure') || undefined;
-  const month = searchParams.get('month') || undefined;
-  const date = searchParams.get('date') || undefined;
+  const agentName = searchParams.get('name') || undefined;
+  const agentId = searchParams.get('id') || undefined;
   
   try {
-    console.log('[API] Agents request:', { center, service, channel, tenure, month, date });
+    console.log('[API] Check agent request:', { agentName, agentId });
     
-    const result = await getAgents({
-      center,
-      service,
-      channel,
-      tenure,
-      month,
-      date,
-    });
+    const result = await checkAgentExists(agentName, agentId);
     
     if (!result.success) {
-      console.error('[API] Agents fetch failed:', result.error);
+      console.error('[API] Check agent failed:', result.error);
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 500, headers: corsHeaders }
@@ -44,11 +33,18 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { success: true, data: result.data },
+      { 
+        success: true, 
+        found: result.found,
+        agents: result.agents,
+        message: result.found 
+          ? `찾은 상담사: ${result.agents?.length}명` 
+          : '해당 상담사를 찾을 수 없습니다.'
+      },
       { headers: corsHeaders }
     );
   } catch (error) {
-    console.error('[API] Agents error:', error);
+    console.error('[API] Check agent error:', error);
     return NextResponse.json(
       { 
         success: false, 

@@ -29,6 +29,12 @@ export interface GroupPrediction {
   watchListReason?: string[]
 }
 
+export interface AgentErrorInfo {
+  name: string
+  count: number
+  rate: number // 오류율 (%)
+}
+
 export interface AgentPrediction {
   agentId: string
   agentName: string
@@ -40,7 +46,7 @@ export interface AgentPrediction {
   trend: 'improving' | 'stable' | 'worsening'
   riskLevel: 'low' | 'medium' | 'high' | 'critical'
   watchListReason?: string[]
-  mainErrors: string[]
+  mainErrors: AgentErrorInfo[] // 오류 이름과 오류율 포함
 }
 
 // 주차 정의 (1~5일: W1, 6~12일: W2, 13~19일: W3, 20~31일: W4)
@@ -60,9 +66,9 @@ export function getCurrentWeek(): 'W1' | 'W2' | 'W3' | 'W4' {
 // 추세 판정
 export function determineTrend(weeklyRates: number[]): 'improving' | 'stable' | 'worsening' {
   if (weeklyRates.length < 2) return 'stable'
-
+  
   const recentChange = weeklyRates[weeklyRates.length - 1] - weeklyRates[weeklyRates.length - 2]
-
+  
   if (recentChange < -0.3) return 'improving'   // 0.3%p 이상 개선
   if (recentChange > 0.3) return 'worsening'    // 0.3%p 이상 악화
   return 'stable'
@@ -76,17 +82,17 @@ export function predictMonthEnd(
   daysRemaining: number
 ): { predicted: number; w4Predicted: number } {
   const totalDays = daysPassed + daysRemaining
-
+  
   // W4 예측: 최근 추세 반영 (W2→W3 변화량을 W3→W4에 적용)
   let w4Predicted = currentRate
   if (weeklyRates.length >= 2) {
     const weeklyChange = weeklyRates[weeklyRates.length - 1] - weeklyRates[weeklyRates.length - 2]
     w4Predicted = Math.max(0, weeklyRates[weeklyRates.length - 1] + weeklyChange)
   }
-
+  
   // 월말 예측: 가중 평균
   const predicted = (currentRate * daysPassed + w4Predicted * daysRemaining) / totalDays
-
+  
   return { predicted: Number(predicted.toFixed(2)), w4Predicted: Number(w4Predicted.toFixed(2)) }
 }
 
@@ -98,11 +104,11 @@ export function calculateAchievementProbability(
 ): number {
   // 기본 확률: 예측값과 목표의 비율
   let baseProbability = 100 - ((predicted - target) / target) * 100
-
+  
   // 추세에 따른 조정
   if (trend === 'improving') baseProbability += 10
   if (trend === 'worsening') baseProbability -= 15
-
+  
   // 0~100% 범위로 제한
   return Math.min(100, Math.max(0, Math.round(baseProbability)))
 }
@@ -132,27 +138,27 @@ export function checkWatchListConditions(
   previousWeekRate?: number
 ): string[] {
   const reasons: string[] = []
-
+  
   // 1. 목표 달성 확률 30% 미만
   if (prediction.achievementProbability < 30) {
     reasons.push('목표 달성 확률 30% 미만')
   }
-
+  
   // 2. 전주 대비 50% 이상 급등
   if (previousWeekRate && prediction.currentRate > previousWeekRate * 1.5) {
     reasons.push('전주 대비 50% 이상 급등')
   }
-
+  
   // 3. 악화 추세 + 목표 초과
   if (prediction.trend === 'worsening' && prediction.currentRate > prediction.targetRate) {
     reasons.push('악화 추세 + 목표 초과')
   }
-
+  
   // 4. Critical 위험도
   if (prediction.riskLevel === 'critical') {
     reasons.push('위험도 Critical')
   }
-
+  
   return reasons
 }
 
@@ -162,14 +168,14 @@ export function checkAgentWatchConditions(
   processRate: number
 ): string[] {
   const reasons: string[] = []
-
+  
   if (attitudeRate > 5) {
     reasons.push(`태도 오류율 ${attitudeRate.toFixed(2)}% (기준 5% 초과)`)
   }
   if (processRate > 6) {
     reasons.push(`오상담 오류율 ${processRate.toFixed(2)}% (기준 6% 초과)`)
   }
-
+  
   return reasons
 }
 
@@ -192,7 +198,7 @@ export function generatePrediction(
   const { predicted, w4Predicted } = predictMonthEnd(currentRate, weeklyRates, daysPassed, daysRemaining)
   const achievementProbability = calculateAchievementProbability(predicted, targetRate, trend)
   const riskLevel = determineRiskLevel(predicted, targetRate, trend, achievementProbability)
-
+  
   return {
     currentRate,
     predictedRate: predicted,

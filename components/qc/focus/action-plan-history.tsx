@@ -85,7 +85,7 @@ export function ActionPlanHistory({ plans, onViewDetail }: ActionPlanHistoryProp
               >
                 <div className="flex-1 space-y-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-slate-900">{plan.agentName}</span>
+                    <span className="font-medium text-slate-900">{plan.agentName} / {plan.agentId || plan.id}</span>
                     <Badge variant="outline" className="text-xs bg-white border-slate-200">
                       {plan.center} {plan.group}
                     </Badge>
@@ -148,7 +148,7 @@ export function ActionPlanHistory({ plans, onViewDetail }: ActionPlanHistoryProp
             <div className="space-y-4">
               <div className="rounded-lg bg-slate-50 p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-medium text-slate-900">{selectedPlan.agentName}</span>
+                  <span className="font-medium text-slate-900">{selectedPlan.agentName} / {selectedPlan.agentId || selectedPlan.id}</span>
                   <Badge variant="outline" className="text-xs bg-white border-slate-200">
                     {selectedPlan.center} {selectedPlan.group}
                   </Badge>

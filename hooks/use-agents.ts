@@ -2,6 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react"
 
+export interface AgentErrorInfo {
+  name: string
+  count: number
+  rate: number // 오류율 (%)
+}
+
 export interface Agent {
   id: string
   name: string
@@ -15,6 +21,7 @@ export interface Agent {
   attitudeErrorRate: number
   opsErrorRate: number
   overallErrorRate: number
+  topErrors?: AgentErrorInfo[] // 주요 오류 항목 (이름, 개수, 오류율 포함)
 }
 
 interface UseAgentsOptions {

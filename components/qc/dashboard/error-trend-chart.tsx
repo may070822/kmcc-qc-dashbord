@@ -28,6 +28,10 @@ interface TrendData {
 interface ErrorTrendChartProps {
   data: TrendData[]
   targetRate: number
+  dateRange?: {
+    startDate: string
+    endDate: string
+  }
 }
 
 const COLORS = {
@@ -36,7 +40,17 @@ const COLORS = {
   target: "#ef4444",
 }
 
-export function ErrorTrendChart({ data, targetRate }: ErrorTrendChartProps) {
+export function ErrorTrendChart({ data, targetRate, dateRange }: ErrorTrendChartProps) {
+  // 날짜 범위 표시 텍스트 계산
+  const getDateRangeLabel = () => {
+    if (dateRange && dateRange.startDate && dateRange.endDate) {
+      const start = new Date(dateRange.startDate);
+      const end = new Date(dateRange.endDate);
+      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      return `${daysDiff}일`;
+    }
+    return "최근 14일";
+  };
   const renderChart = (yongsanKey: keyof TrendData, gwangjuKey: keyof TrendData, title: string) => (
     <div className="h-[300px]">
       <ResponsiveContainer width="100%" height="100%">
@@ -117,7 +131,7 @@ export function ErrorTrendChart({ data, targetRate }: ErrorTrendChartProps) {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between text-lg">
           <span>센터별 오류율 추이</span>
-          <span className="text-sm font-normal text-gray-500">최근 14일</span>
+          <span className="text-sm font-normal text-gray-500">{getDateRangeLabel()}</span>
         </CardTitle>
       </CardHeader>
       <CardContent>

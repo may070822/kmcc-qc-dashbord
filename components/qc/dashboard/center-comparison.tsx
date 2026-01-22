@@ -84,10 +84,12 @@ export function CenterComparison({ centers }: CenterComparisonProps) {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {center.groups.map((group) => (
+            {center.groups
+              .filter((group) => group.name && group.name.trim() !== '') // 빈 이름 필터링
+              .map((group) => (
               <div key={group.name} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-foreground">{group.name}</span>
+                  <span className="font-medium text-foreground">{group.name || '미분류'}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">{group.agentCount}명</span>
                     <span

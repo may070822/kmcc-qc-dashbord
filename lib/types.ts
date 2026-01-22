@@ -161,3 +161,74 @@ export interface Report {
     needsAttention: number
   }
 }
+
+// AI 챗봇 관련 타입
+export interface AIChatMessage {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  timestamp: Date
+}
+
+export interface AIChatRequest {
+  message: string
+  agentId?: string
+  group?: {
+    center?: string
+    service?: string
+    channel?: string
+  }
+  context?: Record<string, any>
+  conversationHistory?: AIChatMessage[]
+}
+
+export interface AIChatResponse {
+  success: boolean
+  message?: string
+  error?: string
+}
+
+export interface AgentAnalysisContext {
+  agentId: string
+  agentName: string
+  center: string
+  service: string
+  channel: string
+  tenureMonths: number
+  tenureGroup: string
+  totalEvaluations: number
+  attitudeErrorRate: number
+  opsErrorRate: number
+  overallErrorRate: number
+  errorBreakdown: Array<{
+    itemName: string
+    errorCount: number
+    errorRate: number
+  }>
+  trendData: Array<{
+    date: string
+    errorRate: number
+  }>
+}
+
+export interface GroupAnalysisContext {
+  center: string
+  service: string
+  channel: string
+  totalAgents: number
+  totalEvaluations: number
+  attitudeErrorRate: number
+  opsErrorRate: number
+  overallErrorRate: number
+  topErrors: Array<{
+    itemName: string
+    errorCount: number
+    errorRate: number
+    affectedAgents: number
+  }>
+  agentRankings: Array<{
+    agentId: string
+    agentName: string
+    errorRate: number
+  }>
+}

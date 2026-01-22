@@ -104,7 +104,7 @@ export function AgentTable({ agents, onSelectAgent }: AgentTableProps) {
           {sortedAgents.map((agent) => (
             <TableRow key={agent.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onSelectAgent(agent)}>
               <TableCell>{getStatusBadge(agent.status)}</TableCell>
-              <TableCell className="font-medium">{agent.name}</TableCell>
+              <TableCell className="font-medium">{agent.name} / {agent.id}</TableCell>
               <TableCell>
                 <span className="text-muted-foreground">
                   {agent.center} {agent.group}
@@ -126,16 +126,22 @@ export function AgentTable({ agents, onSelectAgent }: AgentTableProps) {
                 </span>
               </TableCell>
               <TableCell className="text-right">
-                <span
-                  className={cn(
-                    "flex items-center justify-end gap-1 text-sm",
-                    agent.trend > 0 ? "text-red-600" : "text-green-600",
-                  )}
-                >
-                  {agent.trend > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {agent.trend > 0 ? "+" : ""}
-                  {agent.trend.toFixed(2)}%
-                </span>
+                {agent.trend === 0 && agent.trend !== null ? (
+                  <span className="text-sm text-muted-foreground">0.00%</span>
+                ) : agent.trend === null || agent.trend === undefined ? (
+                  <span className="text-sm text-muted-foreground">-</span>
+                ) : (
+                  <span
+                    className={cn(
+                      "flex items-center justify-end gap-1 text-sm",
+                      agent.trend > 0 ? "text-red-600" : "text-green-600",
+                    )}
+                  >
+                    {agent.trend > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                    {agent.trend > 0 ? "+" : ""}
+                    {agent.trend.toFixed(2)}%
+                  </span>
+                )}
               </TableCell>
               <TableCell className="text-right font-mono">{agent.totalCalls}</TableCell>
               <TableCell>

@@ -25,10 +25,12 @@ export interface CenterStats {
   errorRate: number
   attitudeErrorRate: number
   businessErrorRate: number
+  trend?: number // 증감비율 추가
   services: Array<{
     name: string
     agentCount: number
     errorRate: number
+    trend?: number // 서비스별 증감비율 추가
   }>
 }
 
@@ -45,7 +47,11 @@ export interface TrendData {
 }
 
 // 대시보드 데이터 훅
-export function useDashboardData(selectedDate?: string) {
+export function useDashboardData(
+  selectedDate?: string,
+  startDate?: string,
+  endDate?: string
+) {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [centerStats, setCenterStats] = useState<CenterStats[]>([])
   const [trendData, setTrendData] = useState<TrendData[]>([])
@@ -59,11 +65,19 @@ export function useDashboardData(selectedDate?: string) {
     setError(null)
 
     try {
+      // trend API 호출 시 날짜 범위 파라미터 추가
+      let trendUrl = `${API_BASE}?type=trend`;
+      if (startDate && endDate) {
+        trendUrl += `&startDate=${startDate}&endDate=${endDate}`;
+      } else {
+        trendUrl += `&days=14`; // 기본값: 최근 14일
+      }
+
       // 병렬로 데이터 fetch
       const [statsRes, centersRes, trendRes] = await Promise.all([
         fetch(`${API_BASE}?type=dashboard${selectedDate ? `&date=${selectedDate}` : ""}`),
         fetch(`${API_BASE}?type=centers`),
-        fetch(`${API_BASE}?type=trend&days=14`),
+        fetch(trendUrl),
       ])
 
       const [statsData, centersData, trendDataRes] = await Promise.all([
@@ -108,7 +122,7 @@ export function useDashboardData(selectedDate?: string) {
     } finally {
       setLoading(false)
     }
-  }, [selectedDate])
+  }, [selectedDate, startDate, endDate])
 
   // Hydration이 완료된 후에만 데이터 fetch
   useEffect(() => {
@@ -122,12 +136,12 @@ export function useDashboardData(selectedDate?: string) {
     }
   }, [mounted, fetchData])
 
-  // selectedDate가 변경되면 다시 fetch
+  // selectedDate 또는 날짜 범위가 변경되면 다시 fetch
   useEffect(() => {
-    if (mounted && hasFetched.current && selectedDate !== undefined) {
+    if (mounted && hasFetched.current) {
       fetchData()
     }
-  }, [selectedDate, mounted, fetchData])
+  }, [selectedDate, startDate, endDate, mounted, fetchData])
 
   return {
     stats,

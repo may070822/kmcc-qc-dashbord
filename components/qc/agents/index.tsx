@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AgentFilters } from "./agent-filters"
 import { AgentTable } from "./agent-table"
@@ -28,21 +28,120 @@ export function AgentAnalysis() {
   const agentRows = useMemo(() => {
     return (agents || []).map((agent) => {
       const errorRate = agent.overallErrorRate
+      
+      // tenureGroup이 없으면 tenureMonths로 계산
+      let tenureDisplay = agent.tenureGroup
+      if (!tenureDisplay || tenureDisplay === '') {
+        if (agent.tenureMonths > 0) {
+          const months = agent.tenureMonths
+          if (months < 3) tenureDisplay = "3개월 미만"
+          else if (months < 6) tenureDisplay = "3개월 이상"
+          else if (months < 12) tenureDisplay = "6개월 이상"
+          else tenureDisplay = "12개월 이상"
+        } else {
+          tenureDisplay = "분석 중"
+        }
+      }
+      
+      // 주요이슈: topErrors의 첫 번째 항목 사용
+      let topIssue = "분석 중"
+      if (agent.topErrors && agent.topErrors.length > 0) {
+        const firstError = agent.topErrors[0]
+        if (typeof firstError === 'string') {
+          topIssue = firstError
+        } else if (firstError.name) {
+          // AgentErrorInfo 형태인 경우
+          topIssue = `${firstError.name} (${firstError.count})`
+        }
+      }
+      
       return {
         id: agent.id,
         name: agent.name,
         center: agent.center,
         group: `${agent.service}/${agent.channel}`,
-        tenure: agent.tenureGroup,
+        tenure: tenureDisplay,
         errorRate,
-        trend: 0, // TODO: 전주 대비 계산
+        trend: 0, // 전일대비는 useEffect에서 계산
         totalCalls: agent.totalEvaluations,
         totalErrors: Math.floor((agent.attitudeErrorRate + agent.opsErrorRate) / 2),
-        topIssue: "분석 중", // TODO: 항목별 오류 집계
+        topIssue,
         status: (errorRate > 4 ? "위험" : "양호") as "양호" | "위험",
+        // 전일대비 계산을 위한 원본 데이터 보관
+        _agent: agent,
       }
     })
   }, [agents])
+  
+  // 전일대비 계산 (간단한 버전 - 향후 최적화 필요)
+  // null은 데이터 없음을 의미, 0은 변화 없음을 의미
+  const [trends, setTrends] = useState<Record<string, number | null>>({})
+  
+  useEffect(() => {
+    const calculateTrends = async () => {
+      if (agentRows.length === 0) return
+      
+      try {
+        // 전일 날짜 계산
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        const yesterdayStr = yesterday.toISOString().split('T')[0]
+        
+        // 전일 모든 상담사 오류율 조회 (특정 날짜로 조회)
+        const response = await fetch(
+          `/api/agents?date=${yesterdayStr}${selectedCenter !== 'all' ? `&center=${selectedCenter}` : ''}${selectedServiceGroup !== 'all' ? `&service=${selectedServiceGroup}` : ''}${selectedChannel !== 'all' ? `&channel=${selectedChannel}` : ''}`
+        )
+        const result = await response.json()
+        
+        const trendMap: Record<string, number | null> = {}
+        
+        if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
+          const prevAgents = result.data as typeof agents
+          const prevAgentMap = new Map(prevAgents.map(a => [a.id, a]))
+          
+          agentRows.forEach((agentRow) => {
+            const prevAgent = prevAgentMap.get(agentRow.id)
+            if (prevAgent && prevAgent.overallErrorRate !== undefined && prevAgent.overallErrorRate !== null) {
+              const prevErrorRate = prevAgent.overallErrorRate || 0
+              const currentErrorRate = agentRow.errorRate || 0
+              // 전일 대비 계산: 현재 오류율 - 전일 오류율 (percentage point)
+              const trend = Number((currentErrorRate - prevErrorRate).toFixed(2))
+              trendMap[agentRow.id] = trend
+            } else {
+              // 전일 데이터가 없으면 null로 설정 (나중에 "-"로 표시)
+              trendMap[agentRow.id] = null as any
+            }
+          })
+        } else {
+          // 전일 데이터가 없으면 모든 상담사의 trend를 null로 설정
+          console.log('[Agents] No previous day data found:', yesterdayStr, result)
+          agentRows.forEach((agentRow) => {
+            trendMap[agentRow.id] = null as any
+          })
+        }
+        
+        setTrends(trendMap)
+      } catch (err) {
+        console.error('Failed to calculate trends:', err)
+        // 에러 발생 시 모든 상담사의 trend를 null로 설정 (데이터 없음)
+        const trendMap: Record<string, number | null> = {}
+        agentRows.forEach((agentRow) => {
+          trendMap[agentRow.id] = null
+        })
+        setTrends(trendMap)
+      }
+    }
+    
+    calculateTrends()
+  }, [agentRows, agents, selectedCenter, selectedServiceGroup, selectedChannel])
+  
+  // 전일대비가 계산된 agentRows 생성
+  const agentsWithTrends = useMemo(() => {
+    return agentRows.map((agent) => ({
+      ...agent,
+      trend: trends[agent.id] !== undefined && trends[agent.id] !== null ? trends[agent.id] : 0,
+    }))
+  }, [agentRows, trends])
 
   const filteredAgents = useMemo(() => {
     return agentRows.filter((agent) => {
@@ -128,7 +227,10 @@ export function AgentAnalysis() {
             selectedTenure={selectedTenure}
             onTenureChange={setSelectedTenure}
           />
-          <AgentTable agents={filteredAgents} onSelectAgent={handleSelectAgent} />
+          <AgentTable agents={filteredAgents.map(a => {
+            const withTrend = agentsWithTrends.find(awt => awt.id === a.id)
+            return withTrend ? { ...a, trend: withTrend.trend } : a
+          })} onSelectAgent={handleSelectAgent} />
         </CardContent>
       </Card>
 
