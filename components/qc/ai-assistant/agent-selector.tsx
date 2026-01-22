@@ -26,6 +26,7 @@ export function AgentSelector({
   selectedGroup,
   onAgentSelect,
   onGroupSelect,
+  onClear,
 }: AgentSelectorProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCenter, setSelectedCenter] = useState("all")
@@ -73,6 +74,10 @@ export function AgentSelector({
     setSelectedService("all")
     setSelectedChannel("all")
     setMode("agent")
+    // 부모 컴포넌트의 clear 핸들러도 호출
+    if (onClear) {
+      onClear()
+    }
   }
 
   return (
@@ -220,10 +225,13 @@ export function AgentSelector({
           <>
             {/* 그룹 선택 */}
             <div className="space-y-2">
-              <Select value={selectedCenter} onValueChange={(v) => {
-                setSelectedCenter(v)
-                setSelectedService("all")
-              }}>
+              <Select 
+                value={selectedCenter === "all" ? undefined : selectedCenter} 
+                onValueChange={(v) => {
+                  setSelectedCenter(v)
+                  setSelectedService("all")
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="센터 선택" />
                 </SelectTrigger>
@@ -261,7 +269,7 @@ export function AgentSelector({
 
               <Button
                 onClick={handleGroupApply}
-                disabled={selectedCenter === "all" || selectedService === "all" || selectedChannel === "all"}
+                disabled={!selectedCenter || selectedCenter === "all" || !selectedService || selectedService === "all" || !selectedChannel || selectedChannel === "all"}
                 className="w-full"
               >
                 그룹 선택

@@ -54,6 +54,8 @@ export function AIAssistant() {
     setSelectedAgentId(agentId)
     if (!agentId) {
       setSelectedGroup(undefined)
+      // 선택 초기화 시 prevSelectionRef도 초기화하여 다시 선택 시 자동 분석이 트리거되도록 함
+      prevSelectionRef.current = {}
     }
   }
 
@@ -61,7 +63,18 @@ export function AIAssistant() {
     setSelectedGroup(group)
     if (group) {
       setSelectedAgentId(undefined)
+    } else {
+      // 선택 초기화 시 prevSelectionRef도 초기화하여 다시 선택 시 자동 분석이 트리거되도록 함
+      prevSelectionRef.current = {}
     }
+  }
+
+  // 선택 초기화 핸들러 추가
+  const handleClearSelection = () => {
+    setSelectedAgentId(undefined)
+    setSelectedGroup(undefined)
+    // 선택 초기화 시 prevSelectionRef도 초기화하여 다시 선택 시 자동 분석이 트리거되도록 함
+    prevSelectionRef.current = {}
   }
 
   return (
@@ -109,6 +122,7 @@ export function AIAssistant() {
               selectedGroup={selectedGroup}
               onAgentSelect={handleAgentSelect}
               onGroupSelect={handleGroupSelect}
+              onClear={handleClearSelection}
             />
 
             {/* 안내 카드 */}
