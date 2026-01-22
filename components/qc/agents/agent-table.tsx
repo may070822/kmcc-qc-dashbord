@@ -14,7 +14,7 @@ interface AgentRow {
   group: string
   tenure: string
   errorRate: number
-  trend: number
+  trend: number | null
   totalCalls: number
   totalErrors: number
   topIssue: string
@@ -46,6 +46,12 @@ export function AgentTable({ agents, onSelectAgent }: AgentTableProps) {
     const multiplier = sortDirection === "asc" ? 1 : -1
     if (sortField === "name") {
       return multiplier * a.name.localeCompare(b.name)
+    }
+    // trend가 null인 경우 처리
+    if (sortField === "trend") {
+      const aTrend = a.trend ?? -Infinity
+      const bTrend = b.trend ?? -Infinity
+      return multiplier * (aTrend - bTrend)
     }
     return multiplier * (a[sortField] - b[sortField])
   })
@@ -126,10 +132,10 @@ export function AgentTable({ agents, onSelectAgent }: AgentTableProps) {
                 </span>
               </TableCell>
               <TableCell className="text-right">
-                {agent.trend === 0 && agent.trend !== null ? (
-                  <span className="text-sm text-muted-foreground">0.00%</span>
-                ) : agent.trend === null || agent.trend === undefined ? (
+                {agent.trend === null || agent.trend === undefined ? (
                   <span className="text-sm text-muted-foreground">-</span>
+                ) : agent.trend === 0 ? (
+                  <span className="text-sm text-muted-foreground">0.00%</span>
                 ) : (
                   <span
                     className={cn(

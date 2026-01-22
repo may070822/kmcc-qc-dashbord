@@ -382,45 +382,37 @@ export async function getAgents(filters?: {
   channel?: string;
   tenure?: string;
   month?: string;
+  date?: string;
 }): Promise<{ success: boolean; data?: Agent[]; error?: string }> {
   try {
     const bigquery = getBigQueryClient();
     
-    // 기본값: 이번 달
-    const month = filters?.month || new Date().toISOString().slice(0, 7);
-    
     let whereClause = 'WHERE 1=1';
-    const params: any = { month };
+    const params: any = {};
     
-    if (filters?.center && filters.center !== 'all') {
-      whereClause += ' AND a.center = @center';
-      params.center = filters.center;
+    // date 파라미터가 있으면 특정 날짜로 필터링, 없으면 month 사용
+    let evalWhereClause = '';
+    if (filters?.date) {
+      evalWhereClause = 'WHERE evaluation_date = @date';
+      params.date = filters.date;
+    } else {
+      // 기본값: 이번 달
+      const month = filters?.month || new Date().toISOString().slice(0, 7);
+      evalWhereClause = 'WHERE FORMAT_DATE(\'%Y-%m\', evaluation_date) = @month';
+      params.month = month;
     }
-    if (filters?.service && filters.service !== 'all') {
-      whereClause += ' AND e.service = @service';
-      params.service = filters.service;
-    }
-    if (filters?.channel && filters.channel !== 'all') {
-      whereClause += ' AND e.channel = @channel';
-      params.channel = filters.channel;
-    }
-    // tenure 필터는 agents 테이블에 tenure_group 컬럼 있을 때만 활성화
-    // if (filters?.tenure && filters.tenure !== 'all') {
-    //   whereClause += ' AND a.tenure_group = @tenure';
-    //   params.tenure = filters.tenure;
-    // }
-    
-    // WHERE 절 재구성 (evaluations 테이블 기준)
-    let evalWhereClause = 'WHERE FORMAT_DATE(\'%Y-%m\', evaluation_date) = @month';
     
     if (filters?.center && filters.center !== 'all') {
       evalWhereClause += ' AND center = @center';
+      params.center = filters.center;
     }
     if (filters?.service && filters.service !== 'all') {
       evalWhereClause += ' AND service = @service';
+      params.service = filters.service;
     }
     if (filters?.channel && filters.channel !== 'all') {
       evalWhereClause += ' AND channel = @channel';
+      params.channel = filters.channel;
     }
     
     const query = `

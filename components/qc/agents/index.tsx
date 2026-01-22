@@ -79,7 +79,10 @@ export function AgentAnalysis() {
   
   useEffect(() => {
     const calculateTrends = async () => {
-      if (agentRows.length === 0) return
+      if (agentRows.length === 0) {
+        setTrends({})
+        return
+      }
       
       try {
         // 전일 날짜 계산
@@ -88,9 +91,21 @@ export function AgentAnalysis() {
         const yesterdayStr = yesterday.toISOString().split('T')[0]
         
         // 전일 모든 상담사 오류율 조회 (특정 날짜로 조회)
-        const response = await fetch(
-          `/api/agents?date=${yesterdayStr}${selectedCenter !== 'all' ? `&center=${selectedCenter}` : ''}${selectedServiceGroup !== 'all' ? `&service=${selectedServiceGroup}` : ''}${selectedChannel !== 'all' ? `&channel=${selectedChannel}` : ''}`
-        )
+        const queryParams = new URLSearchParams({
+          date: yesterdayStr,
+        })
+        
+        if (selectedCenter !== 'all') {
+          queryParams.append('center', selectedCenter)
+        }
+        if (selectedServiceGroup !== 'all') {
+          queryParams.append('service', selectedServiceGroup)
+        }
+        if (selectedChannel !== 'all') {
+          queryParams.append('channel', selectedChannel)
+        }
+        
+        const response = await fetch(`/api/agents?${queryParams.toString()}`)
         const result = await response.json()
         
         const trendMap: Record<string, number | null> = {}
@@ -109,14 +124,14 @@ export function AgentAnalysis() {
               trendMap[agentRow.id] = trend
             } else {
               // 전일 데이터가 없으면 null로 설정 (나중에 "-"로 표시)
-              trendMap[agentRow.id] = null as any
+              trendMap[agentRow.id] = null
             }
           })
         } else {
           // 전일 데이터가 없으면 모든 상담사의 trend를 null로 설정
           console.log('[Agents] No previous day data found:', yesterdayStr, result)
           agentRows.forEach((agentRow) => {
-            trendMap[agentRow.id] = null as any
+            trendMap[agentRow.id] = null
           })
         }
         
@@ -139,7 +154,8 @@ export function AgentAnalysis() {
   const agentsWithTrends = useMemo(() => {
     return agentRows.map((agent) => ({
       ...agent,
-      trend: trends[agent.id] !== undefined && trends[agent.id] !== null ? trends[agent.id] : 0,
+      // null을 유지하여 데이터 없음을 표시 (0은 변화 없음을 의미)
+      trend: trends[agent.id] !== undefined ? trends[agent.id] : null,
     }))
   }, [agentRows, trends])
 
