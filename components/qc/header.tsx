@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar, RefreshCw } from "lucide-react"
+import { Calendar, RefreshCw, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
@@ -9,10 +9,11 @@ interface HeaderProps {
   selectedDate: string
   onDateChange: (date: string) => void
   onRefresh: () => void
+  onSearch: () => void
   lastUpdated: string
 }
 
-export function Header({ selectedDate, onDateChange, onRefresh, lastUpdated }: HeaderProps) {
+export function Header({ selectedDate, onDateChange, onRefresh, onSearch, lastUpdated }: HeaderProps) {
   const today = new Date().toISOString().split("T")[0]
   const dates = Array.from({ length: 7 }, (_, i) => {
     const date = new Date()
@@ -22,7 +23,7 @@ export function Header({ selectedDate, onDateChange, onRefresh, lastUpdated }: H
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6 shadow-sm">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
         <Select value={selectedDate} onValueChange={onDateChange}>
           <SelectTrigger className="w-44 border-border bg-background">
             <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -36,6 +37,10 @@ export function Header({ selectedDate, onDateChange, onRefresh, lastUpdated }: H
             ))}
           </SelectContent>
         </Select>
+        <Button size="sm" onClick={onSearch} variant="default" className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <Search className="mr-2 h-4 w-4" />
+          조회
+        </Button>
       </div>
 
       <div className="flex items-center gap-4">
@@ -45,7 +50,7 @@ export function Header({ selectedDate, onDateChange, onRefresh, lastUpdated }: H
             {lastUpdated || "--:--:--"}
           </Badge>
         </div>
-        <Button size="sm" onClick={onRefresh} className="bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button size="sm" onClick={onRefresh} variant="outline">
           <RefreshCw className="mr-2 h-4 w-4" />
           새로고침
         </Button>

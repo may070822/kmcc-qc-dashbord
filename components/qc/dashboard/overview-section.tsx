@@ -2,6 +2,11 @@
 
 import { StatsCard } from "../stats-card"
 
+interface CenterErrorRates {
+  yongsan: number
+  gwangju: number
+}
+
 interface OverviewSectionProps {
   totalAgentsYongsan: number
   totalAgentsGwangju: number
@@ -21,6 +26,9 @@ interface OverviewSectionProps {
     overallErrorRate: number
   }>
   onWatchlistClick: () => void
+  attitudeErrorByCenter?: CenterErrorRates
+  consultErrorByCenter?: CenterErrorRates
+  overallErrorByCenter?: CenterErrorRates
 }
 
 export function OverviewSection({
@@ -37,6 +45,9 @@ export function OverviewSection({
   overallErrorTrend,
   centerStats,
   onWatchlistClick,
+  attitudeErrorByCenter,
+  consultErrorByCenter,
+  overallErrorByCenter,
 }: OverviewSectionProps) {
   const totalWatchlist = watchlistYongsan + watchlistGwangju
   
@@ -73,6 +84,10 @@ export function OverviewSection({
         subtitle={`용산 ${yongsanAttitudeRate.toFixed(2)}% / 광주 ${gwangjuAttitudeRate.toFixed(2)}%`}
         trend={attitudeErrorTrend}
         variant={attitudeErrorRate > 3 ? "warning" : "success"}
+        centerBreakdown={attitudeErrorByCenter ? {
+          yongsan: `${attitudeErrorByCenter.yongsan.toFixed(2)}%`,
+          gwangju: `${attitudeErrorByCenter.gwangju.toFixed(2)}%`
+        } : undefined}
       />
       <StatsCard
         title="오상담/오처리 오류율"
@@ -80,6 +95,10 @@ export function OverviewSection({
         subtitle={`용산 ${yongsanBusinessRate.toFixed(2)}% / 광주 ${gwangjuBusinessRate.toFixed(2)}%`}
         trend={consultErrorTrend}
         variant={consultErrorRate > 3 ? "warning" : "success"}
+        centerBreakdown={consultErrorByCenter ? {
+          yongsan: `${consultErrorByCenter.yongsan.toFixed(2)}%`,
+          gwangju: `${consultErrorByCenter.gwangju.toFixed(2)}%`
+        } : undefined}
       />
       <StatsCard
         title="전체 오류율"
@@ -87,6 +106,10 @@ export function OverviewSection({
         subtitle={`용산 ${yongsanOverallRate.toFixed(2)}% / 광주 ${gwangjuOverallRate.toFixed(2)}%`}
         trend={overallErrorTrend}
         variant={overallErrorRate > 5 ? "destructive" : overallErrorRate > 3 ? "warning" : "success"}
+        centerBreakdown={overallErrorByCenter ? {
+          yongsan: `${overallErrorByCenter.yongsan.toFixed(2)}%`,
+          gwangju: `${overallErrorByCenter.gwangju.toFixed(2)}%`
+        } : undefined}
       />
     </div>
   )
