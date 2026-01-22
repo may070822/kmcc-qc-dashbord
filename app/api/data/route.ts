@@ -8,6 +8,7 @@ import {
   getDailyErrors,
   getWeeklyErrors,
   getItemErrorStats,
+  getAgentDetail,
 } from "@/lib/bigquery"
 
 // CORS 헤더
@@ -97,6 +98,17 @@ export async function GET(request: Request) {
           startDate,
           endDate,
         })
+        break
+
+      case "agent-detail":
+        const agentId = searchParams.get("agentId")
+        if (!agentId) {
+          return NextResponse.json(
+            { success: false, error: "agentId is required" },
+            { status: 400, headers: corsHeaders }
+          )
+        }
+        result = await getAgentDetail(agentId, startDate, endDate)
         break
 
       default:

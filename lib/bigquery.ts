@@ -422,8 +422,13 @@ export async function getAgents(filters?: {
         center,
         service,
         channel,
-        0 as tenureMonths,
-        '' as tenureGroup,
+        -- 근속기간 계산: hire_date가 있으면 사용, 없으면 tenure_months 사용
+        COALESCE(
+          DATE_DIFF(CURRENT_DATE(), MAX(hire_date), MONTH),
+          MAX(tenure_months),
+          0
+        ) as tenureMonths,
+        COALESCE(MAX(tenure_group), '') as tenureGroup,
         COUNT(*) as totalEvaluations,
         ROUND(SAFE_DIVIDE(SUM(attitude_error_count), COUNT(*) * 5) * 100, 2) as attitudeErrorRate,
         ROUND(SAFE_DIVIDE(SUM(business_error_count), COUNT(*) * 11) * 100, 2) as opsErrorRate,
@@ -1858,6 +1863,172 @@ export async function checkAgentExists(
     };
   } catch (error) {
     console.error('[BigQuery] checkAgentExists error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+// ============================================
+// 상담사 상세 데이터 조회 (일별 추이 및 항목별 오류)
+// ============================================
+
+export interface AgentDetailData {
+  agentId: string
+  agentName: string
+  dailyTrend: Array<{
+    date: string
+    errorRate: number
+  }>
+  itemErrors: Array<{
+    itemId: string
+    itemName: string
+    errorCount: number
+    category: "상담태도" | "오상담/오처리"
+  }>
+}
+
+export async function getAgentDetail(
+  agentId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<{ success: boolean; data?: AgentDetailData; error?: string }> {
+  try {
+    const bigquery = getBigQueryClient();
+    
+    // 기본값: 최근 14일
+    let queryStartDate = startDate;
+    let queryEndDate = endDate;
+    if (!queryStartDate || !queryEndDate) {
+      const now = new Date();
+      queryEndDate = now.toISOString().split('T')[0];
+      const start = new Date(now);
+      start.setDate(start.getDate() - 14);
+      queryStartDate = start.toISOString().split('T')[0];
+    }
+    
+    // 1. 일별 오류율 추이 조회
+    const dailyTrendQuery = `
+      SELECT
+        evaluation_date as date,
+        COUNT(*) as total_evaluations,
+        SUM(attitude_error_count) as attitude_errors,
+        SUM(business_error_count) as business_errors,
+        ROUND(SAFE_DIVIDE(SUM(attitude_error_count) + SUM(business_error_count), COUNT(*) * 16) * 100, 2) as error_rate
+      FROM \`${DATASET_ID}.evaluations\`
+      WHERE agent_id = @agentId
+        AND evaluation_date BETWEEN @startDate AND @endDate
+      GROUP BY evaluation_date
+      ORDER BY evaluation_date ASC
+    `;
+    
+    const [dailyTrendRows] = await bigquery.query({
+      query: dailyTrendQuery,
+      params: {
+        agentId,
+        startDate: queryStartDate,
+        endDate: queryEndDate,
+      },
+      location: 'asia-northeast3',
+    });
+    
+    // 2. 항목별 오류 개수 조회 (단일 쿼리로 모든 항목 집계)
+    const itemErrorsQuery = `
+      SELECT
+        SUM(CAST(greeting_error AS INT64)) as greeting_errors,
+        SUM(CAST(empathy_error AS INT64)) as empathy_errors,
+        SUM(CAST(apology_error AS INT64)) as apology_errors,
+        SUM(CAST(additional_inquiry_error AS INT64)) as additional_inquiry_errors,
+        SUM(CAST(unkind_error AS INT64)) as unkind_errors,
+        SUM(CAST(consult_type_error AS INT64)) as consult_type_errors,
+        SUM(CAST(guide_error AS INT64)) as guide_errors,
+        SUM(CAST(identity_check_error AS INT64)) as identity_check_errors,
+        SUM(CAST(required_search_error AS INT64)) as required_search_errors,
+        SUM(CAST(wrong_guide_error AS INT64)) as wrong_guide_errors,
+        SUM(CAST(process_missing_error AS INT64)) as process_missing_errors,
+        SUM(CAST(process_incomplete_error AS INT64)) as process_incomplete_errors,
+        SUM(CAST(system_error AS INT64)) as system_errors,
+        SUM(CAST(id_mapping_error AS INT64)) as id_mapping_errors,
+        SUM(CAST(flag_keyword_error AS INT64)) as flag_keyword_errors,
+        SUM(CAST(history_error AS INT64)) as history_errors
+      FROM \`${DATASET_ID}.evaluations\`
+      WHERE agent_id = @agentId
+        AND evaluation_date BETWEEN @startDate AND @endDate
+    `;
+    
+    const [itemErrorsRows] = await bigquery.query({
+      query: itemErrorsQuery,
+      params: {
+        agentId,
+        startDate: queryStartDate,
+        endDate: queryEndDate,
+      },
+      location: 'asia-northeast3',
+    });
+    
+    // 항목별 매핑
+    const itemMap = [
+      { key: 'greeting_errors', id: 'att1', name: '첫인사/끝인사 누락', category: '상담태도' as const },
+      { key: 'empathy_errors', id: 'att2', name: '공감표현 누락', category: '상담태도' as const },
+      { key: 'apology_errors', id: 'att3', name: '사과표현 누락', category: '상담태도' as const },
+      { key: 'additional_inquiry_errors', id: 'att4', name: '추가문의 누락', category: '상담태도' as const },
+      { key: 'unkind_errors', id: 'att5', name: '불친절', category: '상담태도' as const },
+      { key: 'consult_type_errors', id: 'err1', name: '상담유형 오설정', category: '오상담/오처리' as const },
+      { key: 'guide_errors', id: 'err2', name: '가이드 미준수', category: '오상담/오처리' as const },
+      { key: 'identity_check_errors', id: 'err3', name: '본인확인 누락', category: '오상담/오처리' as const },
+      { key: 'required_search_errors', id: 'err4', name: '필수탐색 누락', category: '오상담/오처리' as const },
+      { key: 'wrong_guide_errors', id: 'err5', name: '오안내', category: '오상담/오처리' as const },
+      { key: 'process_missing_errors', id: 'err6', name: '전산 처리 누락', category: '오상담/오처리' as const },
+      { key: 'process_incomplete_errors', id: 'err7', name: '전산 처리 미흡/정정', category: '오상담/오처리' as const },
+      { key: 'system_errors', id: 'err8', name: '전산 조작 미흡/오류', category: '오상담/오처리' as const },
+      { key: 'id_mapping_errors', id: 'err9', name: '콜/픽/트립ID 매핑누락&오기재', category: '오상담/오처리' as const },
+      { key: 'flag_keyword_errors', id: 'err10', name: '플래그/키워드 누락&오기재', category: '오상담/오처리' as const },
+      { key: 'history_errors', id: 'err11', name: '상담이력 기재 미흡', category: '오상담/오처리' as const },
+    ];
+    
+    const itemErrors = itemMap
+      .map(item => ({
+        itemId: item.id,
+        itemName: item.name,
+        errorCount: Number(itemErrorsRows[0]?.[item.key]) || 0,
+        category: item.category,
+      }))
+      .filter(item => item.errorCount > 0);
+    
+    // 3. 상담사 이름 조회
+    const agentNameQuery = `
+      SELECT DISTINCT agent_name
+      FROM \`${DATASET_ID}.evaluations\`
+      WHERE agent_id = @agentId
+      LIMIT 1
+    `;
+    
+    const [agentNameRows] = await bigquery.query({
+      query: agentNameQuery,
+      params: { agentId },
+      location: 'asia-northeast3',
+    });
+    
+    const agentName = agentNameRows[0]?.agent_name || agentId;
+    
+    // 결과 변환
+    const dailyTrend = dailyTrendRows.map((row: any) => ({
+      date: row.date?.value || row.date || '',
+      errorRate: Number(row.error_rate) || 0,
+    }));
+    
+    return {
+      success: true,
+      data: {
+        agentId,
+        agentName,
+        dailyTrend,
+        itemErrors,
+      },
+    };
+  } catch (error) {
+    console.error('[BigQuery] getAgentDetail error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
