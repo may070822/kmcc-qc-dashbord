@@ -63,15 +63,26 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
   try {
     const bigquery = getBigQueryClient();
     
-    // 날짜가 없으면 어제 날짜 사용
+    // 날짜가 없으면 최근 30일 데이터 사용 (전체 통계)
     let queryDate = targetDate;
-    if (!queryDate) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      queryDate = yesterday.toISOString().split('T')[0];
+    let dateFilter = '';
+    let params: any = {};
+    
+    if (queryDate) {
+      // 특정 날짜 지정 시 해당 날짜만 조회
+      dateFilter = 'WHERE evaluation_date = @queryDate';
+      params.queryDate = queryDate;
+    } else {
+      // 날짜 미지정 시 최근 30일 데이터 조회
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+      dateFilter = 'WHERE evaluation_date >= @startDate';
+      params.startDate = startDate;
+      queryDate = 'latest'; // 표시용
     }
     
-    console.log(`[BigQuery] getDashboardStats: ${queryDate}`);
+    console.log(`[BigQuery] getDashboardStats: ${queryDate || 'latest 30 days'}`);
     
     const query = `
       WITH daily_stats AS (
@@ -82,7 +93,7 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
           SUM(attitude_error_count) as total_attitude_errors,
           SUM(business_error_count) as total_ops_errors
         FROM \`${DATASET_ID}.evaluations\`
-        WHERE evaluation_date = @queryDate
+        ${dateFilter}
         GROUP BY center
       ),
       watchlist_counts AS (
@@ -90,7 +101,7 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
           center,
           COUNT(DISTINCT agent_id) as watchlist_count
         FROM \`${DATASET_ID}.evaluations\`
-        WHERE evaluation_date = @queryDate
+        ${dateFilter}
           AND (
             (attitude_error_count / 5.0 * 100) > 5
             OR (business_error_count / 11.0 * 100) > 6
@@ -111,7 +122,7 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
     
     const options = {
       query,
-      params: { queryDate },
+      params,
       location: 'asia-northeast3',
     };
     
@@ -422,13 +433,9 @@ export async function getAgents(filters?: {
         center,
         service,
         channel,
-        -- 근속기간 계산: hire_date가 있으면 사용, 없으면 tenure_months 사용
-        COALESCE(
-          DATE_DIFF(CURRENT_DATE(), MAX(hire_date), MONTH),
-          MAX(tenure_months),
-          0
-        ) as tenureMonths,
-        COALESCE(MAX(tenure_group), '') as tenureGroup,
+        -- 근속기간: evaluations 테이블에 tenure 컬럼이 없으므로 0으로 설정
+        0 as tenureMonths,
+        '' as tenureGroup,
         COUNT(*) as totalEvaluations,
         ROUND(SAFE_DIVIDE(SUM(attitude_error_count), COUNT(*) * 5) * 100, 2) as attitudeErrorRate,
         ROUND(SAFE_DIVIDE(SUM(business_error_count), COUNT(*) * 11) * 100, 2) as opsErrorRate,
@@ -842,17 +849,22 @@ export async function getGoals(filters?: {
     const query = `
       SELECT
         target_id as id,
-        target_name as name,
+        CONCAT(center, ' ', COALESCE(service, ''), ' ', period_type) as name,
         center,
-        target_type as type,
-        target_rate as targetRate,
+        CASE 
+          WHEN target_attitude_error_rate IS NOT NULL AND target_business_error_rate IS NOT NULL THEN 'total'
+          WHEN target_attitude_error_rate IS NOT NULL THEN 'attitude'
+          WHEN target_business_error_rate IS NOT NULL THEN 'ops'
+          ELSE 'total'
+        END as type,
+        COALESCE(target_attitude_error_rate, target_business_error_rate, target_overall_error_rate, 0) as targetRate,
         period_type as periodType,
-        period_start as periodStart,
-        period_end as periodEnd,
+        start_date as periodStart,
+        end_date as periodEnd,
         is_active as isActive
       FROM \`${DATASET_ID}.targets\`
       ${whereClause}
-      ORDER BY period_start DESC, center, target_type
+      ORDER BY start_date DESC, center
     `;
     
     const options = {
@@ -896,21 +908,27 @@ export async function saveEvaluationsToBigQuery(evaluations: any[]): Promise<{ s
     const table = dataset.table('evaluations');
     
     // BigQuery insert 형식으로 변환
-    const rows = evaluations.map(evalData => ({
-      evaluation_id: `${evalData.agentId}_${evalData.date}_${Date.now()}`,
+    const rows = evaluations.map(evalData => {
+      // evaluation_id 생성: consult_id가 있으면 사용, 없으면 agentId_date 조합
+      const evaluationId = evalData.consultId
+        ? `${evalData.agentId}_${evalData.date}_${evalData.consultId}`
+        : `${evalData.agentId}_${evalData.date}_${evalData.evaluationId || Date.now()}`;
+      
+      return {
+      evaluation_id: evaluationId,
       evaluation_date: evalData.date,
       center: evalData.center,
       service: evalData.service || '',
       channel: evalData.channel || 'unknown',
       agent_id: evalData.agentId,
       agent_name: evalData.agentName,
-      tenure_group: evalData.tenure || '',
       attitude_error_count: evalData.attitudeErrors || 0,
       business_error_count: evalData.businessErrors || 0,
       total_error_count: (evalData.attitudeErrors || 0) + (evalData.businessErrors || 0),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }));
+      };
+    });
     
     // 배치로 나누어 삽입 (BigQuery 제한: 10,000 rows per request)
     const BATCH_SIZE = 10000;
@@ -2249,19 +2267,12 @@ export async function saveGoalToBigQuery(goal: {
     const isUpdate = !!goal.id;
     
     if (isUpdate) {
-      const query = `
-        UPDATE \`${DATASET_ID}.targets\`
-        SET
-          target_name = @name,
-          center = @center,
-          target_type = @type,
-          target_rate = @targetRate,
-          period_type = @periodType,
-          period_start = @periodStart,
-          period_end = @periodEnd,
-          is_active = @isActive
-        WHERE target_id = @id
-      `;
+      // 실제 테이블 스키마에 맞게 수정 필요 (현재는 오류 방지를 위해 주석 처리)
+      // 실제 컬럼: target_id, center, service, channel, group, target_attitude_error_rate, target_business_error_rate, target_overall_error_rate, period_type, start_date, end_date, is_active
+      return {
+        success: false,
+        error: 'targets 테이블 스키마가 변경되었습니다. 실제 스키마에 맞게 수정이 필요합니다.',
+      };
       
       const [result] = await bigquery.query({
         query,
@@ -2292,12 +2303,11 @@ export async function saveGoalToBigQuery(goal: {
       
       return { success: true, saved: 1 };
     } else {
-      const query = `
-        INSERT INTO \`${DATASET_ID}.targets\`
-        (target_name, center, target_type, target_rate, period_type, period_start, period_end, is_active)
-        VALUES
-        (@name, @center, @type, @targetRate, @periodType, @periodStart, @periodEnd, @isActive)
-      `;
+      // 실제 테이블 스키마에 맞게 수정 필요
+      return {
+        success: false,
+        error: 'targets 테이블 스키마가 변경되었습니다. 실제 스키마에 맞게 수정이 필요합니다.',
+      };
       
       const [result] = await bigquery.query({
         query,
