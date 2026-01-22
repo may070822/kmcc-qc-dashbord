@@ -2263,76 +2263,79 @@ export async function saveGoalToBigQuery(goal: {
 }): Promise<{ success: boolean; saved?: number; error?: string }> {
   try {
     const bigquery = getBigQueryClient();
+    const dataset = bigquery.dataset(DATASET_ID);
+    const table = dataset.table('targets');
     
     const isUpdate = !!goal.id;
     
+    // target_id 생성 또는 사용
+    const targetId = goal.id || `${goal.periodType}_${goal.center || 'all'}_${goal.type}_${Date.now()}`;
+    
+    // type에 따라 적절한 컬럼에 값 설정
+    const targetAttitudeErrorRate = (goal.type === 'attitude' || goal.type === 'total') ? goal.targetRate : null;
+    const targetBusinessErrorRate = (goal.type === 'ops' || goal.type === 'total') ? goal.targetRate : null;
+    const targetOverallErrorRate = goal.type === 'total' ? goal.targetRate : null;
+    
+    // name에서 service 추출 (선택적)
+    // name 형식: "센터 서비스 period_type" 또는 "센터 period_type"
+    const nameParts = goal.name.split(' ');
+    const service = nameParts.length > 2 ? nameParts[1] : null;
+    
+    const row = {
+      target_id: targetId,
+      center: goal.center || null,
+      service: service || null,
+      period_type: goal.periodType,
+      target_attitude_error_rate: targetAttitudeErrorRate,
+      target_business_error_rate: targetBusinessErrorRate,
+      target_overall_error_rate: targetOverallErrorRate,
+      start_date: goal.periodStart,
+      end_date: goal.periodEnd,
+      is_active: goal.isActive,
+      updated_at: new Date().toISOString(),
+    };
+    
     if (isUpdate) {
-      // 실제 테이블 스키마에 맞게 수정 필요 (현재는 오류 방지를 위해 주석 처리)
-      // 실제 컬럼: target_id, center, service, channel, group, target_attitude_error_rate, target_business_error_rate, target_overall_error_rate, period_type, start_date, end_date, is_active
-      return {
-        success: false,
-        error: 'targets 테이블 스키마가 변경되었습니다. 실제 스키마에 맞게 수정이 필요합니다.',
-      };
+      // UPDATE 쿼리
+      const updateQuery = `
+        UPDATE \`${DATASET_ID}.targets\`
+        SET
+          center = @center,
+          service = @service,
+          period_type = @periodType,
+          target_attitude_error_rate = @targetAttitudeErrorRate,
+          target_business_error_rate = @targetBusinessErrorRate,
+          target_overall_error_rate = @targetOverallErrorRate,
+          start_date = @startDate,
+          end_date = @endDate,
+          is_active = @isActive,
+          updated_at = CURRENT_TIMESTAMP()
+        WHERE target_id = @targetId
+      `;
       
       const [result] = await bigquery.query({
-        query,
+        query: updateQuery,
         params: {
-          id: goal.id,
-          name: goal.name,
-          center: goal.center,
-          type: goal.type,
-          targetRate: goal.targetRate,
+          targetId,
+          center: goal.center || null,
+          service: service || null,
           periodType: goal.periodType,
-          periodStart: goal.periodStart,
-          periodEnd: goal.periodEnd,
+          targetAttitudeErrorRate,
+          targetBusinessErrorRate,
+          targetOverallErrorRate,
+          startDate: goal.periodStart,
+          endDate: goal.periodEnd,
           isActive: goal.isActive,
-        },
-        types: {
-          id: 'STRING',
-          name: 'STRING',
-          center: 'STRING',
-          type: 'STRING',
-          targetRate: 'FLOAT64',
-          periodType: 'STRING',
-          periodStart: 'DATE',
-          periodEnd: 'DATE',
-          isActive: 'BOOL',
         },
         location: 'asia-northeast3',
       });
       
       return { success: true, saved: 1 };
     } else {
-      // 실제 테이블 스키마에 맞게 수정 필요
-      return {
-        success: false,
-        error: 'targets 테이블 스키마가 변경되었습니다. 실제 스키마에 맞게 수정이 필요합니다.',
-      };
+      // INSERT
+      row.created_at = new Date().toISOString();
       
-      const [result] = await bigquery.query({
-        query,
-        params: {
-          name: goal.name,
-          center: goal.center,
-          type: goal.type,
-          targetRate: goal.targetRate,
-          periodType: goal.periodType,
-          periodStart: goal.periodStart,
-          periodEnd: goal.periodEnd,
-          isActive: goal.isActive,
-        },
-        types: {
-          name: 'STRING',
-          center: 'STRING',
-          type: 'STRING',
-          targetRate: 'FLOAT64',
-          periodType: 'STRING',
-          periodStart: 'DATE',
-          periodEnd: 'DATE',
-          isActive: 'BOOL',
-        },
-        location: 'asia-northeast3',
-      });
+      await table.insert([row]);
       
       return { success: true, saved: 1 };
     }
@@ -2352,20 +2355,44 @@ export async function saveGoalToBigQuery(goal: {
 export async function getReportData(
   type: string,
   period: string,
-  center?: string,
-  service?: string,
-  channel?: string,
-  startDate?: string,
-  endDate?: string
+  filters?: {
+    center?: string;
+    service?: string;
+    channel?: string;
+    startDate?: string;
+    endDate?: string;
+  }
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const bigquery = getBigQueryClient();
+    const { center, service, channel, startDate, endDate } = filters || {};
     
     // 리포트 타입에 따라 다른 쿼리 실행
     // 기본적으로 대시보드 통계를 반환
     if (type === 'dashboard') {
       const stats = await getDashboardStats(startDate);
-      return stats;
+      if (!stats.success || !stats.data) {
+        return stats;
+      }
+      // 리포트 형식으로 변환
+      return {
+        success: true,
+        data: {
+          summary: {
+            totalEvaluations: stats.data.totalEvaluations || 0,
+            totalAgents: (stats.data.totalAgentsYongsan || 0) + (stats.data.totalAgentsGwangju || 0),
+            overallErrorRate: stats.data.overallErrorRate || 0,
+            errorRateTrend: 0, // TODO: 전일 대비 계산
+            targetAchievement: 0, // TODO: 목표 달성률 계산
+            improvedAgents: 0, // TODO: 개선 상담사 수 계산
+            needsAttention: stats.data.watchlistYongsan + stats.data.watchlistGwangju || 0,
+          },
+          topIssues: [],
+          centerComparison: [],
+          dailyTrend: [],
+          groupRanking: [],
+        },
+      };
     } else if (type === 'agents') {
       const agents = await getAgents({ center, service, channel });
       return agents;
@@ -2375,7 +2402,27 @@ export async function getReportData(
     } else {
       // 기본 리포트 데이터
       const stats = await getDashboardStats(startDate);
-      return stats;
+      if (!stats.success || !stats.data) {
+        return stats;
+      }
+      return {
+        success: true,
+        data: {
+          summary: {
+            totalEvaluations: stats.data.totalEvaluations || 0,
+            totalAgents: (stats.data.totalAgentsYongsan || 0) + (stats.data.totalAgentsGwangju || 0),
+            overallErrorRate: stats.data.overallErrorRate || 0,
+            errorRateTrend: 0,
+            targetAchievement: 0,
+            improvedAgents: 0,
+            needsAttention: stats.data.watchlistYongsan + stats.data.watchlistGwangju || 0,
+          },
+          topIssues: [],
+          centerComparison: [],
+          dailyTrend: [],
+          groupRanking: [],
+        },
+      };
     }
   } catch (error) {
     console.error('[BigQuery] getReportData error:', error);

@@ -111,24 +111,24 @@ export function ReportPreview({ report, onDownload }: ReportPreviewProps) {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="h-4 w-4" />총 평가건수
             </div>
-            <p className="mt-1 text-2xl font-bold">{report.summary.totalEvaluations.toLocaleString()}</p>
+            <p className="mt-1 text-2xl font-bold">{(report.summary?.totalEvaluations || 0).toLocaleString()}</p>
           </div>
           <div className="rounded-lg border border-border p-4">
             <div className="text-sm text-muted-foreground">평균 오류율</div>
             <p className="mt-1 flex items-center gap-2 text-2xl font-bold">
-              {report.summary.overallErrorRate.toFixed(2)}%
+              {(report.summary?.overallErrorRate || 0).toFixed(2)}%
               <span
                 className={cn(
                   "flex items-center text-sm",
-                  report.summary.errorRateTrend < 0 ? "text-green-600" : "text-red-600",
+                  (report.summary?.errorRateTrend || 0) < 0 ? "text-green-600" : "text-red-600",
                 )}
               >
-                {report.summary.errorRateTrend < 0 ? (
+                {(report.summary?.errorRateTrend || 0) < 0 ? (
                   <TrendingDown className="h-4 w-4" />
                 ) : (
                   <TrendingUp className="h-4 w-4" />
                 )}
-                {Math.abs(report.summary.errorRateTrend).toFixed(2)}%
+                {Math.abs(report.summary?.errorRateTrend || 0).toFixed(2)}%
               </span>
             </p>
           </div>
@@ -137,14 +137,14 @@ export function ReportPreview({ report, onDownload }: ReportPreviewProps) {
               <CheckCircle className="h-4 w-4 text-green-600" />
               개선 상담사
             </div>
-            <p className="mt-1 text-2xl font-bold text-green-600">{report.summary.improvedAgents}명</p>
+            <p className="mt-1 text-2xl font-bold text-green-600">{report.summary?.improvedAgents || 0}명</p>
           </div>
           <div className="rounded-lg border border-red-300 bg-red-50 p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <AlertTriangle className="h-4 w-4 text-red-600" />
               주의 필요
             </div>
-            <p className="mt-1 text-2xl font-bold text-red-600">{report.summary.needsAttention}명</p>
+            <p className="mt-1 text-2xl font-bold text-red-600">{report.summary?.needsAttention || 0}명</p>
           </div>
         </div>
 
@@ -155,7 +155,7 @@ export function ReportPreview({ report, onDownload }: ReportPreviewProps) {
             <h4 className="font-semibold">오류율 추이</h4>
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={report.dailyTrend}>
+                <LineChart data={report.dailyTrend || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 11 }} />
                   <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} domain={[0, 6]} />
@@ -186,7 +186,7 @@ export function ReportPreview({ report, onDownload }: ReportPreviewProps) {
             <h4 className="font-semibold">주요 오류 항목</h4>
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={report.topIssues} layout="vertical">
+                <BarChart data={report.topIssues || []} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 11 }} />
                   <YAxis dataKey="name" type="category" tick={{ fill: "#374151", fontSize: 11 }} width={100} />
@@ -209,7 +209,7 @@ export function ReportPreview({ report, onDownload }: ReportPreviewProps) {
         <div className="space-y-3">
           <h4 className="font-semibold">그룹별 순위 (오류율 낮은 순)</h4>
           <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-            {report.groupRanking.slice(0, 6).map((group, i) => (
+            {(report.groupRanking || []).slice(0, 6).map((group, i) => (
               <div key={group.group} className="flex items-center justify-between rounded-lg border border-border p-3">
                 <div className="flex items-center gap-3">
                   <span

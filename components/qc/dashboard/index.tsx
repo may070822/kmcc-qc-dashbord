@@ -241,16 +241,16 @@ export function Dashboard({ onNavigateToFocus, selectedDate }: DashboardProps) {
 
       {/* 상단 통계 요약 */}
       <OverviewSection
-        totalAgentsYongsan={dashboardStats.totalAgentsYongsan}
-        totalAgentsGwangju={dashboardStats.totalAgentsGwangju}
-        totalEvaluations={dashboardStats.totalEvaluations}
-        watchlistYongsan={dashboardStats.watchlistYongsan}
-        watchlistGwangju={dashboardStats.watchlistGwangju}
-        attitudeErrorRate={dashboardStats.attitudeErrorRate}
+        totalAgentsYongsan={dashboardStats?.totalAgentsYongsan || 0}
+        totalAgentsGwangju={dashboardStats?.totalAgentsGwangju || 0}
+        totalEvaluations={dashboardStats?.totalEvaluations || 0}
+        watchlistYongsan={dashboardStats?.watchlistYongsan || 0}
+        watchlistGwangju={dashboardStats?.watchlistGwangju || 0}
+        attitudeErrorRate={dashboardStats?.attitudeErrorRate || 0}
         attitudeErrorTrend={trends.attitudeTrend}
-        consultErrorRate={dashboardStats.businessErrorRate}
+        consultErrorRate={dashboardStats?.businessErrorRate || 0}
         consultErrorTrend={trends.consultTrend}
-        overallErrorRate={dashboardStats.overallErrorRate}
+        overallErrorRate={dashboardStats?.overallErrorRate || 0}
         overallErrorTrend={trends.overallTrend}
         onWatchlistClick={onNavigateToFocus}
         attitudeErrorByCenter={attitudeErrorByCenter}
