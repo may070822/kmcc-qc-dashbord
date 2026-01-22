@@ -113,20 +113,46 @@ export async function GET(request: NextRequest) {
     const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
     const daysRemaining = lastDay - daysPassed;
     
-    // 목표값 조회
-    const targetQuery = `
-      SELECT center, target_type, target_rate
-      FROM \`${DATASET_ID}.targets\`
-      WHERE period_type = 'monthly'
-        AND period_start <= CURRENT_DATE()
-        AND period_end >= CURRENT_DATE()
-        AND is_active = TRUE
-    `;
+    // 목표값 조회 (period_start, period_end 컬럼이 없을 수 있으므로 안전하게 처리)
+    let targetRows: any[] = [];
     
-    const [targetRows] = await bigquery.query({
-      query: targetQuery,
-      location: 'asia-northeast3',
-    });
+    try {
+      // 먼저 period_start, period_end 없이 시도
+      const simpleQuery = `
+        SELECT center, target_type, target_rate
+        FROM \`${DATASET_ID}.targets\`
+        WHERE period_type = 'monthly'
+          AND is_active = TRUE
+      `;
+      
+      const [rows] = await bigquery.query({
+        query: simpleQuery,
+        location: 'asia-northeast3',
+      });
+      targetRows = rows;
+    } catch (error) {
+      // period_start, period_end가 있는 쿼리로 재시도
+      try {
+        const fullQuery = `
+          SELECT center, target_type, target_rate
+          FROM \`${DATASET_ID}.targets\`
+          WHERE period_type = 'monthly'
+            AND period_start <= CURRENT_DATE()
+            AND period_end >= CURRENT_DATE()
+            AND is_active = TRUE
+        `;
+        
+        const [rows] = await bigquery.query({
+          query: fullQuery,
+          location: 'asia-northeast3',
+        });
+        targetRows = rows;
+      } catch (fullError) {
+        // targets 테이블이 없거나 쿼리 실패 시 기본값 사용
+        console.warn('[API] Could not fetch targets, using defaults:', fullError);
+        targetRows = [];
+      }
+    }
     
     const targets: Record<string, { attitude: number; ops: number }> = {};
     targetRows.forEach((row: any) => {

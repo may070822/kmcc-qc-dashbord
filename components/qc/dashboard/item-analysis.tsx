@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -18,8 +18,10 @@ import {
   Legend,
 } from "recharts"
 import { evaluationItems } from "@/lib/mock-data"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useItemStats } from "@/hooks/use-item-stats"
+import { useDailyErrors } from "@/hooks/use-daily-errors"
 
 interface ItemAnalysisProps {
   selectedCenter: string
@@ -33,42 +35,82 @@ const NAVY_LIGHT = "#2d4a6f"
 const KAKAO = "#f9e000"
 const KAKAO_DARK = "#e6ce00"
 
-// 목업 항목별 데이터 생성
-const generateItemData = (center: string, service: string, channel: string, tenure: string) => {
-  return evaluationItems.map((item, idx) => ({
-    id: item.id,
-    name: item.name,
-    shortName: item.shortName,
-    category: item.category,
-    errorRate: Number((Math.random() * 3 + 0.5).toFixed(2)),
-    errorCount: Math.floor(Math.random() * 30) + 5,
-    trend: Number((Math.random() * 2 - 1).toFixed(2)),
-  }))
-}
-
-// 항목별 추이 데이터 생성
-const generateItemTrendData = (itemId: string, days = 14) => {
-  const data = []
-  const today = new Date()
-
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - i)
-    data.push({
-      date: `${date.getMonth() + 1}/${date.getDate()}`,
-      용산: Number((Math.random() * 2 + 0.5).toFixed(2)),
-      광주: Number((Math.random() * 2 + 0.3).toFixed(2)),
-    })
-  }
-
-  return data
-}
-
 export function ItemAnalysis({ selectedCenter, selectedService, selectedChannel, selectedTenure }: ItemAnalysisProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
 
-  const itemData = generateItemData(selectedCenter, selectedService, selectedChannel, selectedTenure)
+  // 실제 데이터 조회
+  const endDate = new Date().toISOString().split('T')[0]
+  const startDate = new Date()
+  startDate.setDate(startDate.getDate() - 30)
+  const startDateStr = startDate.toISOString().split('T')[0]
+  
+  const { data: itemStatsData, loading: itemStatsLoading } = useItemStats({
+    center: selectedCenter !== "all" ? selectedCenter : undefined,
+    service: selectedService !== "all" ? selectedService : undefined,
+    channel: selectedChannel !== "all" ? selectedChannel : undefined,
+    startDate: startDateStr,
+    endDate,
+  })
+  
+  const { data: dailyErrorsData } = useDailyErrors({
+    startDate: startDateStr,
+    endDate,
+    center: selectedCenter !== "all" ? selectedCenter : undefined,
+    service: selectedService !== "all" ? selectedService : undefined,
+    channel: selectedChannel !== "all" ? selectedChannel : undefined,
+  })
+  
+  // 항목별 데이터 변환
+  const itemData = useMemo(() => {
+    if (!itemStatsData || itemStatsData.length === 0) {
+      return evaluationItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        shortName: item.shortName,
+        category: item.category,
+        errorRate: 0,
+        errorCount: 0,
+        trend: 0,
+      }))
+    }
+    
+    return itemStatsData.map((stat) => {
+      const evalItem = evaluationItems.find(ei => ei.id === stat.itemId)
+      return {
+        id: stat.itemId,
+        name: evalItem?.name || stat.itemName,
+        shortName: evalItem?.shortName || stat.itemName,
+        category: stat.category,
+        errorRate: stat.errorRate,
+        errorCount: stat.errorCount,
+        trend: stat.trend,
+      }
+    })
+  }, [itemStatsData])
+  
+  // 항목별 추이 데이터 생성 (일자별 데이터 기반)
+  const generateItemTrendData = (itemId: string) => {
+    if (!dailyErrorsData || dailyErrorsData.length === 0) {
+      return []
+    }
+    
+    const data: Array<{ date: string; 용산: number; 광주: number }> = []
+    
+    dailyErrorsData.forEach((dayData) => {
+      const itemData = dayData.items.find(i => i.itemId === itemId)
+      if (itemData) {
+        // 센터별로 분리하려면 추가 필터링 필요 (현재는 전체 데이터)
+        data.push({
+          date: new Date(dayData.date).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }),
+          용산: itemData.errorCount, // TODO: 센터별로 분리
+          광주: 0, // TODO: 센터별로 분리
+        })
+      }
+    })
+    
+    return data
+  }
 
   const filteredItems =
     selectedCategory === "all" ? itemData : itemData.filter((item) => item.category === selectedCategory)
@@ -96,6 +138,14 @@ export function ItemAnalysis({ selectedCenter, selectedService, selectedChannel,
         </div>
       </CardHeader>
       <CardContent>
+        {itemStatsLoading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            <span>데이터 로딩 중...</span>
+          </div>
+        )}
+        
+        {!itemStatsLoading && (
         <Tabs defaultValue="chart" className="w-full">
           <TabsList className="mb-4">
             <TabsTrigger value="chart">차트</TabsTrigger>
@@ -305,6 +355,7 @@ export function ItemAnalysis({ selectedCenter, selectedService, selectedChannel,
             </div>
           </TabsContent>
         </Tabs>
+        )}
       </CardContent>
     </Card>
   )

@@ -1,48 +1,87 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { evaluationItems } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react"
+import { useWeeklyErrors } from "@/hooks/use-weekly-errors"
 
-// 주차별 데이터 생성
-const generateWeeklyData = () => {
-  const weeks = [
-    { id: "w1", label: "10/2~10/8", shortLabel: "10월 1주" },
-    { id: "w2", label: "10/9~10/15", shortLabel: "10월 2주" },
-    { id: "w3", label: "10/16~10/22", shortLabel: "10월 3주" },
-    { id: "w4", label: "10/23~10/29", shortLabel: "10월 4주" },
-    { id: "w5", label: "10/30~11/5", shortLabel: "10월 5주" },
-    { id: "w6", label: "11/6~11/12", shortLabel: "11월 1주" },
-  ]
-
-  const data: Record<string, Record<string, { count: number; rate: number }>> = {}
-
-  evaluationItems.forEach((item) => {
-    data[item.id] = {}
-    weeks.forEach((week, idx) => {
-      const count = Math.floor(Math.random() * 150) + 20
-      const rate = Number((Math.random() * 30 + 1).toFixed(1))
-      data[item.id][week.id] = { count, rate }
-    })
-  })
-
-  return { weeks, data }
+interface WeeklyErrorTableProps {
+  startDate?: string
+  endDate?: string
 }
 
-export function WeeklyErrorTable() {
+export function WeeklyErrorTable({ startDate: propStartDate, endDate: propEndDate }: WeeklyErrorTableProps = {}) {
   const [category, setCategory] = useState<"all" | "상담태도" | "오상담/오처리">("all")
-  const { weeks, data } = generateWeeklyData()
+  
+  // 실제 데이터 조회 (기본값: 최근 2개월)
+  const endDate = propEndDate || new Date().toISOString().split('T')[0]
+  const startDate = propStartDate || (() => {
+    const date = new Date()
+    date.setMonth(date.getMonth() - 2)
+    return date.toISOString().split('T')[0]
+  })()
+  
+  const { data: weeklyErrorsData, loading, error } = useWeeklyErrors({
+    startDate,
+    endDate,
+  })
+  
+  // 데이터 변환
+  const { weeks, data } = useMemo(() => {
+    if (!weeklyErrorsData || weeklyErrorsData.length === 0) {
+      return { weeks: [], data: {} }
+    }
+    
+    const weeksMap = new Map<string, { id: string; label: string; shortLabel: string }>()
+    const dataMap: Record<string, Record<string, { count: number; rate: number }>> = {}
+    
+    // evaluationItems 초기화
+    evaluationItems.forEach((item) => {
+      dataMap[item.id] = {}
+    })
+    
+    weeklyErrorsData.forEach((weekData) => {
+      const weekId = weekData.week.toLowerCase()
+      if (!weeksMap.has(weekId)) {
+        weeksMap.set(weekId, {
+          id: weekId,
+          label: weekData.weekLabel,
+          shortLabel: weekData.weekLabel,
+        })
+      }
+      
+      weekData.items.forEach((item) => {
+        const evalItem = evaluationItems.find(ei => ei.id === item.itemId)
+        if (evalItem && dataMap[evalItem.id]) {
+          dataMap[evalItem.id][weekId] = {
+            count: item.errorCount,
+            rate: item.errorRate,
+          }
+        }
+      })
+    })
+    
+    const weeksArray = Array.from(weeksMap.values())
+    
+    return { weeks: weeksArray, data: dataMap }
+  }, [weeklyErrorsData])
 
   const filteredItems =
     category === "all" ? evaluationItems : evaluationItems.filter((item) => item.category === category)
 
   // 전주 대비 계산
   const getComparison = (itemId: string) => {
-    const currentWeek = data[itemId]["w6"]
-    const prevWeek = data[itemId]["w5"]
+    if (weeks.length < 2 || !data[itemId]) {
+      return { countChange: 0, rateChange: 0 }
+    }
+    const currentWeek = data[itemId][weeks[weeks.length - 1]?.id]
+    const prevWeek = data[itemId][weeks[weeks.length - 2]?.id]
+    if (!currentWeek || !prevWeek) {
+      return { countChange: 0, rateChange: 0 }
+    }
     const countChange = currentWeek.count - prevWeek.count
     const rateChange = Number((currentWeek.rate - prevWeek.rate).toFixed(1))
     return { countChange, rateChange }
@@ -66,6 +105,20 @@ export function WeeklyErrorTable() {
         </div>
       </CardHeader>
       <CardContent>
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            <span>데이터 로딩 중...</span>
+          </div>
+        )}
+        
+        {error && (
+          <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm mb-4">
+            <strong>데이터 로드 오류:</strong> {error}
+          </div>
+        )}
+        
+        {!loading && !error && (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -222,10 +275,11 @@ export function WeeklyErrorTable() {
                 </td>
                 <td className="p-2 text-center font-bold bg-[#f9e000]/30 text-slate-700">-</td>
               </tr>
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  )
+          </tbody>
+        </table>
+      </div>
+        )}
+    </CardContent>
+  </Card>
+)
 }

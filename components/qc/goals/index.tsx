@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { GoalCard, type GoalData } from "./goal-card"
@@ -16,31 +16,75 @@ export function GoalManagement() {
   const [filterType, setFilterType] = useState("all")
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<GoalData | null>(null)
+  const [goalCurrentRates, setGoalCurrentRates] = useState<Record<string, number>>({})
 
   // BigQuery에서 목표 데이터 가져오기
-  const { data: goalsData, loading, error } = useGoals({
+  const { data: goalsData, loading, error, refetch } = useGoals({
     center: filterCenter,
     periodType: "monthly",
     isActive: true,
   })
+  
+  // 목표별 현재 실적 조회
+  useEffect(() => {
+    if (!goalsData || goalsData.length === 0) return
+    
+    const fetchCurrentRates = async () => {
+      const rates: Record<string, number> = {}
+      
+      for (const goal of goalsData) {
+        try {
+          const params = new URLSearchParams()
+          params.append("action", "currentRate")
+          params.append("goalId", goal.id)
+          params.append("goalType", goal.type)
+          if (goal.center) params.append("center", goal.center)
+          params.append("startDate", goal.periodStart)
+          params.append("endDate", goal.periodEnd)
+          
+          const response = await fetch(`/api/goals?${params.toString()}`)
+          const result = await response.json()
+          
+          if (result.success && result.data) {
+            rates[goal.id] = result.data.currentRate
+          }
+        } catch (err) {
+          console.error(`Failed to fetch current rate for goal ${goal.id}:`, err)
+        }
+      }
+      
+      setGoalCurrentRates(rates)
+    }
+    
+    fetchCurrentRates()
+  }, [goalsData])
 
-  // GoalData 형식으로 변환
+  // GoalData 형식으로 변환 (현재 실적은 별도로 조회)
   const goals: GoalData[] = useMemo(() => {
     if (!goalsData) return []
     
     return goalsData.map((goal) => {
-      // 현재 실적 (임시값, 실제로는 대시보드 데이터에서 가져와야 함)
-      const currentErrorRate = goal.targetRate * 0.92 // 임시로 목표의 92%로 설정
-      const progress = 50 // TODO: 실제 기간 경과율 계산
+      // 현재 실적과 progress는 별도로 계산 (useEffect에서)
+      const today = new Date()
+      const goalStart = new Date(goal.periodStart)
+      const goalEnd = new Date(goal.periodEnd)
+      const totalDays = Math.ceil((goalEnd.getTime() - goalStart.getTime()) / (1000 * 60 * 60 * 24))
+      const passedDays = Math.ceil((today.getTime() - goalStart.getTime()) / (1000 * 60 * 60 * 24))
+      const progress = Math.min(100, Math.max(0, Math.round((passedDays / totalDays) * 100)))
       
-      // 상태 판정
+      // 실제 현재 실적 (API에서 조회한 값 사용, 없으면 임시값)
+      const currentErrorRate = goalCurrentRates[goal.id] ?? (goal.targetRate * 0.92)
+      
+      // 상태 판정 (현재 오류율이 목표보다 낮거나 같으면 달성/순항, 높으면 위험/미달)
       let status: GoalData["status"] = "on-track"
       if (currentErrorRate <= goal.targetRate * 0.9) {
-        status = "achieved"
+        status = "achieved" // 목표의 90% 이하: 달성
+      } else if (currentErrorRate <= goal.targetRate) {
+        status = "on-track" // 목표 이하: 순항
       } else if (currentErrorRate > goal.targetRate * 1.1) {
-        status = "missed"
-      } else if (currentErrorRate > goal.targetRate) {
-        status = "at-risk"
+        status = "missed" // 목표의 110% 초과: 미달
+      } else {
+        status = "at-risk" // 목표 초과: 주의
       }
       
       return {
@@ -102,9 +146,54 @@ export function GoalManagement() {
     setFormModalOpen(true)
   }
 
-  const handleSave = (goalData: Partial<GoalData>) => {
-    console.log("Saving goal:", goalData)
-    setEditingGoal(null)
+  const handleSave = async (goalData: Partial<GoalData>) => {
+    try {
+      const isEdit = !!goalData.id
+      const url = '/api/goals'
+      const method = isEdit ? 'PUT' : 'POST'
+      
+      // GoalData를 API 형식으로 변환
+      const apiData = {
+        id: goalData.id,
+        name: goalData.title,
+        center: goalData.center === '전체' ? null : goalData.center,
+        type: goalData.type === 'attitude' ? 'attitude' : goalData.type === 'counseling' ? 'ops' : 'total',
+        targetRate: goalData.targetErrorRate,
+        periodType: goalData.period || 'monthly',
+        periodStart: goalData.startDate,
+        periodEnd: goalData.endDate,
+        isActive: true,
+      }
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(apiData),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        console.log(`Goal ${isEdit ? 'updated' : 'created'} successfully:`, result.data)
+        setEditingGoal(null)
+        setFormModalOpen(false)
+        // 목표 목록 새로고침
+        if (refetch) {
+          refetch()
+        } else {
+          // refetch 함수가 없으면 페이지 새로고침
+          window.location.reload()
+        }
+      } else {
+        console.error('Failed to save goal:', result.error)
+        alert(`목표 저장 실패: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error saving goal:', error)
+      alert(`목표 저장 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   const handleAddNew = () => {

@@ -48,18 +48,18 @@ export function StatsCard({ title, value, subtitle, trend, variant = "default", 
       onClick={onClick}
     >
       <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <div className="flex items-baseline gap-2">
             <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+            {trend !== undefined && (
+              <div className={cn("flex items-center gap-1 text-sm font-medium", getTrendColor())}>
+                {getTrendIcon()}
+                {trend !== 0 && <span>{trend > 0 ? '+' : ''}{trend.toFixed(2)}%</span>}
+              </div>
+            )}
           </div>
-          {trend !== undefined && (
-            <div className={cn("flex items-center gap-1 text-sm font-medium", getTrendColor())}>
-              {getTrendIcon()}
-              <span>{Math.abs(trend).toFixed(2)}%</span>
-            </div>
-          )}
+          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         </div>
       </CardContent>
     </Card>

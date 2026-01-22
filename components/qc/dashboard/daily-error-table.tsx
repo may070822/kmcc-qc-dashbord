@@ -1,43 +1,65 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { evaluationItems } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+import { useDailyErrors } from "@/hooks/use-daily-errors"
+import { Loader2 } from "lucide-react"
 
 const NAVY = "#1e3a5f"
 const KAKAO = "#f9e000"
 
-// 일자별 데이터 생성
-const generateDailyData = () => {
-  const data = []
-  const today = new Date()
-
-  for (let i = 29; i >= 0; i--) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - i)
-    const dayData: Record<string, number | string> = {
-      date: `${date.getMonth() + 1}/${date.getDate()}`,
-      fullDate: date.toISOString().split("T")[0],
-      total: 0,
-    }
-
-    evaluationItems.forEach((item) => {
-      const count = Math.floor(Math.random() * 20)
-      dayData[item.id] = count
-      dayData.total = (dayData.total as number) + count
-    })
-
-    data.push(dayData)
-  }
-
-  return data
+interface DailyErrorTableProps {
+  startDate?: string
+  endDate?: string
 }
 
-export function DailyErrorTable() {
+export function DailyErrorTable({ startDate: propStartDate, endDate: propEndDate }: DailyErrorTableProps = {}) {
   const [category, setCategory] = useState<"all" | "상담태도" | "오상담/오처리">("all")
-  const dailyData = generateDailyData()
+  
+  // 실제 데이터 조회 (기본값: 최근 30일)
+  const endDate = propEndDate || new Date().toISOString().split('T')[0]
+  const startDate = propStartDate || (() => {
+    const date = new Date()
+    date.setDate(date.getDate() - 29)
+    return date.toISOString().split('T')[0]
+  })()
+  
+  const { data: dailyErrorsData, loading, error } = useDailyErrors({
+    startDate,
+    endDate,
+  })
+  
+  // 데이터 변환
+  const dailyData = useMemo(() => {
+    if (!dailyErrorsData || dailyErrorsData.length === 0) {
+      return []
+    }
+    
+    const dataMap = new Map<string, Record<string, number | string>>()
+    
+    dailyErrorsData.forEach((dayData) => {
+      const dayRecord: Record<string, number | string> = {
+        date: new Date(dayData.date).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }),
+        fullDate: dayData.date,
+        total: 0,
+      }
+      
+      evaluationItems.forEach((item) => {
+        const itemData = dayData.items.find(i => i.itemId === item.id)
+        dayRecord[item.id] = itemData?.errorCount || 0
+        dayRecord.total = (dayRecord.total as number) + (itemData?.errorCount || 0)
+      })
+      
+      dataMap.set(dayData.date, dayRecord)
+    })
+    
+    return Array.from(dataMap.values()).sort((a, b) => 
+      new Date(a.fullDate as string).getTime() - new Date(b.fullDate as string).getTime()
+    )
+  }, [dailyErrorsData])
 
   const filteredItems =
     category === "all" ? evaluationItems : evaluationItems.filter((item) => item.category === category)
@@ -63,6 +85,20 @@ export function DailyErrorTable() {
         </div>
       </CardHeader>
       <CardContent>
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            <span>데이터 로딩 중...</span>
+          </div>
+        )}
+        
+        {error && (
+          <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm mb-4">
+            <strong>데이터 로드 오류:</strong> {error}
+          </div>
+        )}
+        
+        {!loading && !error && (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -147,10 +183,11 @@ export function DailyErrorTable() {
                   {recentData.reduce((sum, d) => sum + (d.total as number), 0)}
                 </td>
               </tr>
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  )
+          </tbody>
+        </table>
+      </div>
+        )}
+    </CardContent>
+  </Card>
+)
 }

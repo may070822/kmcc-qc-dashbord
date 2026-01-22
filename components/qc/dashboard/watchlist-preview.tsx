@@ -54,7 +54,7 @@ export function WatchlistPreview({ agents, onViewAll }: WatchlistPreviewProps) {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-foreground">{agent.name}</span>
+                    <span className="font-medium text-foreground">{agent.name} / {agent.id}</span>
                     <Badge variant="outline" className="text-xs">
                       {agent.center} {agent.group}
                     </Badge>

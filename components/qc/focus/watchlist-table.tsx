@@ -103,7 +103,7 @@ export function WatchlistTable({
               <TableCell>
                 <Checkbox checked={selectedAgents.includes(agent.id)} onCheckedChange={() => onSelectAgent(agent.id)} />
               </TableCell>
-              <TableCell className="font-medium text-slate-900">{agent.name}</TableCell>
+              <TableCell className="font-medium text-slate-900">{agent.name} / {agent.id}</TableCell>
               <TableCell>
                 <Badge
                   variant="outline"

@@ -5,6 +5,12 @@ import {
   getDailyTrend,
   getAgents,
   getEvaluations,
+  getDailyErrorBreakdown,
+  getWeeklyErrorBreakdown,
+  getItemErrorStats,
+  getTenureErrorStats,
+  getServiceWeeklyStats,
+  getAgentDetailStats,
 } from "@/lib/bigquery"
 
 // CORS 헤더
@@ -55,7 +61,7 @@ export async function GET(request: Request) {
         break
 
       case "trend":
-        result = await getDailyTrend(days)
+        result = await getDailyTrend(days, startDate, endDate)
         break
 
       case "agents":
@@ -64,6 +70,74 @@ export async function GET(request: Request) {
 
       case "evaluations":
         result = await getEvaluations(startDate, endDate)
+        break
+
+      case "daily-errors":
+        if (!startDate || !endDate) {
+          return NextResponse.json(
+            { success: false, error: "startDate and endDate are required" },
+            { status: 400, headers: corsHeaders }
+          )
+        }
+        result = await getDailyErrorBreakdown(startDate, endDate, {
+          center: searchParams.get("center") || undefined,
+          service: searchParams.get("service") || undefined,
+          channel: searchParams.get("channel") || undefined,
+        })
+        break
+
+      case "weekly-errors":
+        if (!startDate || !endDate) {
+          return NextResponse.json(
+            { success: false, error: "startDate and endDate are required" },
+            { status: 400, headers: corsHeaders }
+          )
+        }
+        result = await getWeeklyErrorBreakdown(startDate, endDate, {
+          center: searchParams.get("center") || undefined,
+          service: searchParams.get("service") || undefined,
+          channel: searchParams.get("channel") || undefined,
+        })
+        break
+
+      case "item-stats":
+        result = await getItemErrorStats({
+          center: searchParams.get("center") || undefined,
+          service: searchParams.get("service") || undefined,
+          channel: searchParams.get("channel") || undefined,
+          startDate,
+          endDate,
+        })
+        break
+
+      case "tenure-stats":
+        result = await getTenureErrorStats({
+          center: searchParams.get("center") || undefined,
+          service: searchParams.get("service") || undefined,
+          channel: searchParams.get("channel") || undefined,
+          startDate,
+          endDate,
+        })
+        break
+
+      case "service-weekly":
+        const month = searchParams.get("month") || new Date().toISOString().slice(0, 7)
+        result = await getServiceWeeklyStats(month, {
+          center: searchParams.get("center") || undefined,
+          service: searchParams.get("service") || undefined,
+          channel: searchParams.get("channel") || undefined,
+        })
+        break
+
+      case "agent-detail":
+        const agentId = searchParams.get("agentId")
+        if (!agentId) {
+          return NextResponse.json(
+            { success: false, error: "agentId is required" },
+            { status: 400, headers: corsHeaders }
+          )
+        }
+        result = await getAgentDetailStats(agentId, startDate, endDate)
         break
 
       default:

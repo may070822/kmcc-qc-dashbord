@@ -35,6 +35,19 @@ export function ActionPlanModal({ open, onOpenChange, agent, onSave }: ActionPla
   const [status, setStatus] = useState<"pending" | "in-progress" | "completed">("pending")
   const [notes, setNotes] = useState("")
 
+  // 모달이 열릴 때 폼 초기화
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      // 모달이 닫힐 때 폼 초기화
+      setIssue("")
+      setPlan("")
+      setTargetDate("")
+      setStatus("pending")
+      setNotes("")
+    }
+    onOpenChange(newOpen)
+  }
+
   const handleSave = () => {
     if (!agent || !issue || !plan || !targetDate) return
 
@@ -55,10 +68,16 @@ export function ActionPlanModal({ open, onOpenChange, agent, onSave }: ActionPla
     onOpenChange(false)
   }
 
+  // agent가 없으면 모달을 닫음
+  if (!agent && open) {
+    onOpenChange(false)
+    return null
+  }
+
   if (!agent) return null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl bg-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-slate-900">
@@ -76,7 +95,7 @@ export function ActionPlanModal({ open, onOpenChange, agent, onSave }: ActionPla
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-lg font-semibold text-slate-900">{agent.name}</span>
+                    <span className="text-lg font-semibold text-slate-900">{agent.name} / {agent.id}</span>
                     <Badge variant="outline" className="bg-white border-slate-200">
                       {agent.center} {agent.group}
                     </Badge>

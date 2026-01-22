@@ -1,50 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { evaluationItems, serviceGroups, channelTypes } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react"
 
 const weeks = [
-  { id: "w1", label: "10월 1주" },
-  { id: "w2", label: "10월 2주" },
-  { id: "w3", label: "10월 3주" },
-  { id: "w4", label: "10월 4주" },
-  { id: "w5", label: "10월 5주" },
-  { id: "w6", label: "11월 1주" },
+  { id: "w1", label: "1주" },
+  { id: "w2", label: "2주" },
+  { id: "w3", label: "3주" },
+  { id: "w4", label: "4주" },
 ]
-
-// 서비스별 주차별 데이터 생성
-const generateServiceWeeklyData = () => {
-  const data: Record<string, Record<string, Record<string, { count: number; rate: number }>>> = {}
-
-  const allServices = [
-    ...serviceGroups["용산"].map((s) => `용산-${s}`),
-    ...serviceGroups["광주"].map((s) => `광주-${s}`),
-  ]
-
-  allServices.forEach((service) => {
-    channelTypes.forEach((channel) => {
-      const key = `${service}-${channel}`
-      data[key] = {}
-
-      evaluationItems.forEach((item) => {
-        data[key][item.id] = {}
-        weeks.forEach((week) => {
-          data[key][item.id][week.id] = {
-            count: Math.floor(Math.random() * 80) + 5,
-            rate: Number((Math.random() * 15 + 0.5).toFixed(1)),
-          }
-        })
-      })
-    })
-  })
-
-  return data
-}
 
 interface ServiceWeeklyTableProps {
   selectedCenter: string
@@ -52,9 +21,68 @@ interface ServiceWeeklyTableProps {
   selectedChannel: string
 }
 
+// 임시 빈 데이터 생성 함수
+function generateServiceWeeklyData(): Record<string, Record<string, Record<string, { count: number; rate: number }>>> {
+  const data: Record<string, Record<string, Record<string, { count: number; rate: number }>>> = {}
+  
+  // 기본 서비스-채널 조합 생성
+  const centers = ["용산", "광주"]
+  const services = ["택시", "대리", "배송"]
+  const channels = ["유선", "채팅"]
+  
+  centers.forEach(center => {
+    services.forEach(service => {
+      channels.forEach(channel => {
+        const key = `${center}-${service}-${channel}`
+        data[key] = {}
+        
+        evaluationItems.forEach(item => {
+          data[key][item.id] = {}
+          weeks.forEach(week => {
+            data[key][item.id][week.id] = { count: 0, rate: 0 }
+          })
+        })
+      })
+    })
+  })
+  
+  return data
+}
+
 export function ServiceWeeklyTable({ selectedCenter, selectedService, selectedChannel }: ServiceWeeklyTableProps) {
   const [category, setCategory] = useState<"all" | "상담태도" | "오상담/오처리">("all")
-  const serviceData = generateServiceWeeklyData()
+  const [serviceData, setServiceData] = useState<Record<string, Record<string, Record<string, { count: number; rate: number }>>>>(generateServiceWeeklyData())
+  const [loading, setLoading] = useState(false)
+  
+  // TODO: BigQuery에서 실제 데이터 조회 (향후 구현)
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     setLoading(true)
+  //     try {
+  //       const month = new Date().toISOString().slice(0, 7) // YYYY-MM
+  //       const params = new URLSearchParams()
+  //       params.append("type", "service-weekly")
+  //       params.append("month", month)
+  //       if (selectedCenter !== "all") params.append("center", selectedCenter)
+  //       if (selectedService !== "all") params.append("service", selectedService)
+  //       if (selectedChannel !== "all") params.append("channel", selectedChannel)
+  //       
+  //       const response = await fetch(`/api/data?${params.toString()}`)
+  //       const result = await response.json()
+  //       
+  //       if (result.success && result.data) {
+  //         // 데이터 변환 로직
+  //         setServiceData(result.data)
+  //       }
+  //     } catch (err) {
+  //       console.error('Failed to fetch service weekly data:', err)
+  //     } finally {
+  //       setLoading(false)
+  //     }
+  //   }
+  //   
+  //   fetchData()
+  // }, [selectedCenter, selectedService, selectedChannel])
 
   // 선택된 서비스-채널 조합
   const selectedKey =

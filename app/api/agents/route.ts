@@ -12,7 +12,7 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
-// GET /api/agents?center=용산&service=택시&channel=유선&tenure=3개월%20이상&month=2026-01
+// GET /api/agents?center=용산&service=택시&channel=유선&tenure=3개월%20이상&month=2026-01&date=2026-01-20
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   
@@ -21,9 +21,10 @@ export async function GET(request: NextRequest) {
   const channel = searchParams.get('channel') || undefined;
   const tenure = searchParams.get('tenure') || undefined;
   const month = searchParams.get('month') || undefined;
+  const date = searchParams.get('date') || undefined;
   
   try {
-    console.log('[API] Agents request:', { center, service, channel, tenure, month });
+    console.log('[API] Agents request:', { center, service, channel, tenure, month, date });
     
     const result = await getAgents({
       center,
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
       channel,
       tenure,
       month,
+      date,
     });
     
     if (!result.success) {

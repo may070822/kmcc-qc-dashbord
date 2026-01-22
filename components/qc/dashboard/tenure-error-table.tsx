@@ -1,41 +1,91 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { evaluationItems, serviceGroups, channelTypes, tenureCategories } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
-
-// 근속기간별 데이터 생성
-const generateTenureData = () => {
-  const data: Record<string, Record<string, Record<string, number>>> = {}
-
-  const allServices = [
-    ...serviceGroups["용산"].map((s) => ({ center: "용산", service: s })),
-    ...serviceGroups["광주"].map((s) => ({ center: "광주", service: s })),
-  ]
-
-  allServices.forEach(({ center, service }) => {
-    channelTypes.forEach((channel) => {
-      const key = `${center}-${service}-${channel}`
-      data[key] = {}
-
-      tenureCategories.forEach((tenure) => {
-        data[key][tenure] = {}
-        evaluationItems.forEach((item) => {
-          data[key][tenure][item.id] = Math.floor(Math.random() * 10)
-        })
-      })
-    })
-  })
-
-  return data
-}
+import { Loader2 } from "lucide-react"
 
 export function TenureErrorTable() {
   const [selectedCenter, setSelectedCenter] = useState<"all" | "용산" | "광주">("all")
   const [selectedService, setSelectedService] = useState("all")
-  const tenureData = generateTenureData()
+  const [tenureStats, setTenureStats] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // 실제 데이터 조회
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+      
+      try {
+        const endDate = new Date().toISOString().split('T')[0]
+        const startDate = new Date()
+        startDate.setDate(startDate.getDate() - 30)
+        const startDateStr = startDate.toISOString().split('T')[0]
+        
+        const params = new URLSearchParams()
+        params.append("type", "tenure-stats")
+        params.append("startDate", startDateStr)
+        params.append("endDate", endDate)
+        if (selectedCenter !== "all") params.append("center", selectedCenter)
+        if (selectedService !== "all") params.append("service", selectedService)
+        
+        const response = await fetch(`/api/data?${params.toString()}`)
+        const result = await response.json()
+        
+        if (result.success && result.data) {
+          setTenureStats(result.data)
+        } else {
+          setError(result.error || "데이터를 불러올 수 없습니다.")
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "데이터 로딩 실패")
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchData()
+  }, [selectedCenter, selectedService])
+  
+  // 데이터 변환
+  const tenureData = useMemo(() => {
+    const data: Record<string, Record<string, Record<string, number>>> = {}
+    const allServices = [
+      ...serviceGroups["용산"].map((s) => ({ center: "용산", service: s })),
+      ...serviceGroups["광주"].map((s) => ({ center: "광주", service: s })),
+    ]
+
+    allServices.forEach(({ center, service }) => {
+      channelTypes.forEach((channel) => {
+        const key = `${center}-${service}-${channel}`
+        data[key] = {}
+        tenureCategories.forEach((tenure) => {
+          data[key][tenure] = {}
+          evaluationItems.forEach((item) => {
+            data[key][tenure][item.id] = 0
+          })
+        })
+      })
+    })
+    
+    // 실제 데이터 매핑
+    tenureStats.forEach((stat) => {
+      const key = `${stat.center}-${stat.service}-${stat.channel}`
+      if (data[key] && data[key][stat.tenureGroup]) {
+        Object.entries(stat.items).forEach(([itemId, count]) => {
+          if (data[key][stat.tenureGroup][itemId] !== undefined) {
+            data[key][stat.tenureGroup][itemId] = count as number
+          }
+        })
+      }
+    })
+
+    return data
+  }, [tenureStats])
 
   const services =
     selectedCenter === "all"
@@ -89,6 +139,20 @@ export function TenureErrorTable() {
         </div>
       </CardHeader>
       <CardContent>
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            <span>데이터 로딩 중...</span>
+          </div>
+        )}
+        
+        {error && (
+          <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm mb-4">
+            <strong>데이터 로드 오류:</strong> {error}
+          </div>
+        )}
+        
+        {!loading && !error && (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -186,6 +250,7 @@ export function TenureErrorTable() {
             </tbody>
           </table>
         </div>
+        )}
       </CardContent>
     </Card>
   )

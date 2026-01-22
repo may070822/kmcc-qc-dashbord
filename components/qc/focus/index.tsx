@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,7 @@ export function FocusManagement() {
   // WatchlistAgent 형식으로 변환
   const watchlistAgents: WatchlistAgent[] = useMemo(() => {
     return (watchlistData || []).map((agent) => ({
-      id: `${agent.agentId}_${agent.service}_${agent.channel}`, // 고유 키 생성
+      id: agent.agentId, // 실제 agent_id만 사용
       name: agent.agentName,
       center: agent.center,
       group: `${agent.service}/${agent.channel}`,
@@ -42,7 +42,8 @@ export function FocusManagement() {
       errorRate: agent.totalRate,
       trend: 0, // TODO: 전주 대비 계산
       daysOnList: 1, // TODO: 등록일 기반 계산
-      mainIssue: agent.topErrors[0] || agent.reason,
+      // topErrors는 이미 "공감표현누락(39)" 형식의 문자열 배열
+      mainIssue: agent.topErrors?.[0] || agent.reason,
       actionPlanStatus: "none" as const, // TODO: action plan 상태 연동
     }))
   }, [watchlistData])
@@ -56,34 +57,32 @@ export function FocusManagement() {
     })
   }, [watchlistAgents, selectedCenter, selectedChannel, selectedTenure])
 
-  const actionPlanHistory = useMemo(() => {
-    return Array.from({ length: 10 }, (_, i) => {
-      const isYongsan = i % 2 === 0
-      const groupList = isYongsan ? groups["용산"] : groups["광주"]
-      return {
-        id: `plan-history-${i}`,
-        agentName: `상담사${i + 1}`,
-        center: isYongsan ? "용산" : "광주",
-        group: groupList[i % groupList.length],
-        issue: ["전산 세팅오류 다발", "불친절 반복", "본인확인 누락", "가이드 미준수"][i % 4],
-        plan: ["1:1 코칭", "재교육 실시", "모니터링 강화", "업무 프로세스 점검"][i % 4],
-        createdAt: `2024-12-${String(15 - i).padStart(2, "0")}`,
-        targetDate: `2024-12-${String(22 - i).padStart(2, "0")}`,
-        status: (["completed", "in-progress", "pending", "delayed"] as const)[i % 4],
-        result: i % 4 === 0 ? "오류율 2.5% 감소" : undefined,
-        improvement: i % 4 === 0 ? Number((Math.random() * 3 + 1).toFixed(1)) : undefined,
-        managerFeedback:
-          i % 2 === 0
-            ? [
-                "코칭 진행 후 태도 개선이 눈에 띄게 향상되었습니다. 지속적인 관찰이 필요합니다.",
-                "재교육 완료 후 오류율이 크게 감소했습니다. 우수 사례로 공유 예정입니다.",
-                "모니터링 결과 개선 추세가 보입니다. 다음 주까지 추가 관찰 진행합니다.",
-                "업무 프로세스 점검 완료. 시스템 개선이 필요한 부분을 IT팀에 요청했습니다.",
-              ][Math.floor(i / 2) % 4]
-            : undefined,
-        feedbackDate: i % 2 === 0 ? `2024-12-${String(17 - i).padStart(2, "0")}` : undefined,
+  // 액션 플랜 히스토리 조회
+  const [actionPlanHistory, setActionPlanHistory] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  
+  useEffect(() => {
+    const fetchActionPlans = async () => {
+      setLoadingHistory(true)
+      try {
+        const response = await fetch("/api/action-plans")
+        const result = await response.json()
+        
+        if (result.success && result.data) {
+          setActionPlanHistory(result.data)
+        } else {
+          // 데이터가 없으면 빈 배열 유지
+          setActionPlanHistory([])
+        }
+      } catch (err) {
+        console.error("Failed to fetch action plans:", err)
+        setActionPlanHistory([])
+      } finally {
+        setLoadingHistory(false)
       }
-    })
+    }
+    
+    fetchActionPlans()
   }, [])
 
   const handleSelectAgent = (id: string) => {
@@ -99,12 +98,44 @@ export function FocusManagement() {
   }
 
   const handleCreatePlan = (agent: WatchlistAgent) => {
+    console.log("Creating plan for agent:", agent)
     setSelectedAgent(agent)
     setPlanModalOpen(true)
   }
 
-  const handleSavePlan = (plan: ActionPlanData) => {
+  const handleSavePlan = async (plan: ActionPlanData) => {
     console.log("Saving plan:", plan)
+    try {
+      const response = await fetch("/api/action-plans", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(plan),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // 성공 시 모달 닫기 및 상태 초기화
+        setPlanModalOpen(false)
+        setSelectedAgent(null)
+        // TODO: 목록 새로고침 또는 성공 메시지 표시
+      } else {
+        console.error("Failed to save action plan:", result.error)
+        // TODO: 에러 메시지 표시
+      }
+    } catch (error) {
+      console.error("Error saving action plan:", error)
+      // TODO: 에러 메시지 표시
+    }
+  }
+  
+  const handleModalClose = (open: boolean) => {
+    setPlanModalOpen(open)
+    if (!open) {
+      setSelectedAgent(null)
+    }
   }
 
   return (
@@ -220,7 +251,7 @@ export function FocusManagement() {
 
       <ActionPlanModal
         open={planModalOpen}
-        onOpenChange={setPlanModalOpen}
+        onOpenChange={handleModalClose}
         agent={selectedAgent}
         onSave={handleSavePlan}
       />

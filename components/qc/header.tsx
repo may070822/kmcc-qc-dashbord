@@ -42,7 +42,7 @@ export function Header({ selectedDate, onDateChange, onRefresh, lastUpdated }: H
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>마지막 업데이트:</span>
           <Badge variant="outline" className="font-mono text-foreground">
-            {lastUpdated}
+            {lastUpdated || "--:--:--"}
           </Badge>
         </div>
         <Button size="sm" onClick={onRefresh} className="bg-primary text-primary-foreground hover:bg-primary/90">
