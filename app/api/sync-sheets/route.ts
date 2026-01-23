@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
         history_error: false,
         // 집계 필드
         attitude_error_count: evalData.attitudeErrors,
-        ops_error_count: evalData.businessErrors,
+        business_error_count: evalData.businessErrors,
         total_error_count: evalData.totalErrors,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

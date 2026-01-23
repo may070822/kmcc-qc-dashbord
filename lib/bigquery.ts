@@ -103,7 +103,7 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
           COUNT(*) as evaluation_count,
           COUNT(DISTINCT agent_id) as agent_count,
           SUM(COALESCE(attitude_error_count, 0)) as total_attitude_errors,
-          SUM(COALESCE(ops_error_count, 0)) as total_ops_errors
+          SUM(COALESCE(business_error_count, 0)) as total_ops_errors
         FROM \`${DATASET_ID}.evaluations\`
         ${dateFilter}
         GROUP BY center
@@ -116,7 +116,7 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
         ${dateFilter}
         AND (
           (attitude_error_count / 5.0 * 100) > 5
-          OR (ops_error_count / 11.0 * 100) > 6
+          OR (business_error_count / 11.0 * 100) > 6
         )
         GROUP BY center
       )

@@ -249,7 +249,7 @@ export async function calculatePredictions(
         END as week,
         COUNT(*) as checks,
         ROUND(SUM(attitude_error_count) / (COUNT(*) * 5) * 100, 2) as attitude_rate,
-        ROUND(SUM(ops_error_count) / (COUNT(*) * 11) * 100, 2) as ops_rate
+        ROUND(SUM(business_error_count) / (COUNT(*) * 11) * 100, 2) as ops_rate
       FROM \`${projectId}.${datasetId}.evaluations\`
       WHERE FORMAT_DATE('%Y-%m', evaluation_date) = '${targetMonth}'
       GROUP BY center, service_channel, week
@@ -260,7 +260,7 @@ export async function calculatePredictions(
         CONCAT(service, '_', channel) as service_channel,
         COUNT(*) as total_checks,
         ROUND(SUM(attitude_error_count) / (COUNT(*) * 5) * 100, 2) as current_attitude_rate,
-        ROUND(SUM(ops_error_count) / (COUNT(*) * 11) * 100, 2) as current_ops_rate
+        ROUND(SUM(business_error_count) / (COUNT(*) * 11) * 100, 2) as current_ops_rate
       FROM \`${projectId}.${datasetId}.evaluations\`
       WHERE FORMAT_DATE('%Y-%m', evaluation_date) = '${targetMonth}'
       GROUP BY center, service_channel
@@ -413,9 +413,9 @@ export async function getWatchListAgents(
         tenure_group,
         COUNT(*) as total_checks,
         SUM(attitude_error_count) as attitude_errors,
-        SUM(ops_error_count) as ops_errors,
+        SUM(business_error_count) as ops_errors,
         ROUND(SUM(attitude_error_count) / (COUNT(*) * 5) * 100, 2) as attitude_rate,
-        ROUND(SUM(ops_error_count) / (COUNT(*) * 11) * 100, 2) as ops_rate,
+        ROUND(SUM(business_error_count) / (COUNT(*) * 11) * 100, 2) as ops_rate,
         -- 항목별 오류 건수
         SUM(CAST(greeting_error AS INT64)) as greeting_errors,
         SUM(CAST(empathy_error AS INT64)) as empathy_errors,
