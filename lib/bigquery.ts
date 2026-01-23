@@ -73,25 +73,38 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
       dateFilter = 'WHERE evaluation_date = @queryDate';
       params.queryDate = queryDate;
     } else {
-      // 날짜 미지정 시 전일(어제) 날짜 계산 (한국 시간 기준)
+      // 날짜 미지정 시 최근 30일 데이터 조회 (누적 통계)
+      // 전일 평가건수는 별도로 계산하되, 전체 통계는 최근 30일 기준
       const now = new Date();
       // UTC 시간을 한국 시간으로 변환 (UTC+9)
       const kstOffset = 9 * 60 * 60 * 1000; // 9시간을 밀리초로
       const kstTime = new Date(now.getTime() + kstOffset);
       
-      // 어제 날짜 계산
-      const yesterday = new Date(kstTime);
-      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      // 최근 30일 범위 계산
+      const endDate = new Date(kstTime);
+      endDate.setUTCDate(endDate.getUTCDate() - 1); // 어제까지
+      const startDate = new Date(endDate);
+      startDate.setUTCDate(startDate.getUTCDate() - 29); // 30일 전
       
-      // YYYY-MM-DD 형식으로 변환
-      const year = yesterday.getUTCFullYear();
-      const month = String(yesterday.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(yesterday.getUTCDate()).padStart(2, '0');
-      queryDate = `${year}-${month}-${day}`;
+      const startYear = startDate.getUTCFullYear();
+      const startMonth = String(startDate.getUTCMonth() + 1).padStart(2, '0');
+      const startDay = String(startDate.getUTCDate()).padStart(2, '0');
+      const startDateStr = `${startYear}-${startMonth}-${startDay}`;
       
-      dateFilter = 'WHERE evaluation_date = @queryDate';
+      const endYear = endDate.getUTCFullYear();
+      const endMonth = String(endDate.getUTCMonth() + 1).padStart(2, '0');
+      const endDay = String(endDate.getUTCDate()).padStart(2, '0');
+      const endDateStr = `${endYear}-${endMonth}-${endDay}`;
+      
+      dateFilter = 'WHERE evaluation_date BETWEEN @startDate AND @endDate';
+      params.startDate = startDateStr;
+      params.endDate = endDateStr;
+      queryDate = endDateStr; // 표시용으로 마지막 날짜 사용
+      params.queryDate = endDateStr; // 전일 평가건수 조회용
+      console.log(`[BigQuery] 최근 30일 범위: ${startDateStr} ~ ${endDateStr} (KST 기준)`);
+    } else {
+      // queryDate가 지정된 경우에도 params.queryDate 설정
       params.queryDate = queryDate;
-      console.log(`[BigQuery] 전일 날짜 계산: ${queryDate} (KST 기준)`);
     }
     
     console.log(`[BigQuery] getDashboardStats: ${queryDate || 'latest 30 days'}`);
@@ -119,17 +132,24 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
           OR (business_error_count / 11.0 * 100) > 6
         )
         GROUP BY center
+      ),
+      yesterday_evaluations AS (
+        SELECT
+          COUNT(*) as yesterday_count
+        FROM \`${DATASET_ID}.evaluations\`
+        WHERE evaluation_date = @queryDate
       )
       SELECT
         COALESCE(SUM(CASE WHEN ds.center = '용산' THEN ds.agent_count ELSE 0 END), 0) as totalAgentsYongsan,
         COALESCE(SUM(CASE WHEN ds.center = '광주' THEN ds.agent_count ELSE 0 END), 0) as totalAgentsGwangju,
-        COALESCE(SUM(ds.evaluation_count), 0) as totalEvaluations,
+        COALESCE(ye.yesterday_count, 0) as totalEvaluations,
         COALESCE(SUM(CASE WHEN wc.center = '용산' THEN wc.watchlist_count ELSE 0 END), 0) as watchlistYongsan,
         COALESCE(SUM(CASE WHEN wc.center = '광주' THEN wc.watchlist_count ELSE 0 END), 0) as watchlistGwangju,
         ROUND(SAFE_DIVIDE(SUM(ds.total_attitude_errors), SUM(ds.evaluation_count) * 5) * 100, 2) as attitudeErrorRate,
         ROUND(SAFE_DIVIDE(SUM(ds.total_ops_errors), SUM(ds.evaluation_count) * 11) * 100, 2) as businessErrorRate
       FROM daily_stats ds
       LEFT JOIN watchlist_counts wc ON ds.center = wc.center
+      CROSS JOIN yesterday_evaluations ye
     `;
     
     console.log(`[BigQuery] Query:`, query);

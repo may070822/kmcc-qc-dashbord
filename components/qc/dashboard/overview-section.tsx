@@ -76,13 +76,17 @@ export function OverviewSection({
     <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
       <StatsCard
         title="총 상담사"
-        value={(agentsYongsan + agentsGwangju) || 0}
+        value={String((agentsYongsan + agentsGwangju) || 0)}
         subtitle={`용산 ${agentsYongsan}명 / 광주 ${agentsGwangju}명`}
       />
-      <StatsCard title="전일 평가건수" value={evaluations.toLocaleString()} subtitle="전일 기준" />
+      <StatsCard 
+        title="전일 평가건수" 
+        value={typeof evaluations === 'number' ? evaluations.toLocaleString('ko-KR') : String(evaluations || 0)} 
+        subtitle="전일 기준" 
+      />
       <StatsCard
         title="유의상담사"
-        value={totalWatchlist || 0}
+        value={String(totalWatchlist || 0)}
         subtitle={`용산 ${watchlistY}명 / 광주 ${watchlistG}명`}
         variant={totalWatchlist > 10 ? "destructive" : totalWatchlist > 5 ? "warning" : "default"}
         onClick={onWatchlistClick}
