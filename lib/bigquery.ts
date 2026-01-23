@@ -146,23 +146,29 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
     console.log(`[BigQuery] Query result rows:`, rows.length);
     if (rows.length > 0) {
       console.log(`[BigQuery] First row:`, JSON.stringify(rows[0], null, 2));
+    } else {
+      console.warn(`[BigQuery] No rows returned from query for date: ${queryDate}`);
     }
     
+    // 기본 데이터 구조 생성 함수
+    const createDefaultStats = (date: string) => ({
+      totalAgentsYongsan: 0,
+      totalAgentsGwangju: 0,
+      totalEvaluations: 0,
+      watchlistYongsan: 0,
+      watchlistGwangju: 0,
+      attitudeErrorRate: 0,
+      businessErrorRate: 0,
+      overallErrorRate: 0,
+      date: date || queryDate,
+    });
+    
     if (rows.length === 0) {
-      console.warn(`[BigQuery] No rows returned from query`);
+      console.warn(`[BigQuery] No rows returned from query - returning default stats`);
+      const defaultData = createDefaultStats(queryDate);
       return {
         success: true,
-        data: {
-          totalAgentsYongsan: 0,
-          totalAgentsGwangju: 0,
-          totalEvaluations: 0,
-          watchlistYongsan: 0,
-          watchlistGwangju: 0,
-          attitudeErrorRate: 0,
-          businessErrorRate: 0,
-          overallErrorRate: 0,
-          date: queryDate,
-        },
+        data: defaultData,
       };
     }
     
@@ -177,23 +183,33 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
       businessErrorRate: row.businessErrorRate,
     });
     
-    const attitudeErrorRate = Number(row.attitudeErrorRate) || 0;
-    const businessErrorRate = Number(row.businessErrorRate) || 0;
+    // NULL 값 처리 및 타입 변환
+    const attitudeErrorRate = row.attitudeErrorRate != null ? Number(row.attitudeErrorRate) : 0;
+    const businessErrorRate = row.businessErrorRate != null ? Number(row.businessErrorRate) : 0;
     
     const result = {
       success: true,
       data: {
-        totalAgentsYongsan: Number(row.totalAgentsYongsan) || 0,
-        totalAgentsGwangju: Number(row.totalAgentsGwangju) || 0,
-        totalEvaluations: Number(row.totalEvaluations) || 0,
-        watchlistYongsan: Number(row.watchlistYongsan) || 0,
-        watchlistGwangju: Number(row.watchlistGwangju) || 0,
-        attitudeErrorRate,
-        businessErrorRate,
+        totalAgentsYongsan: row.totalAgentsYongsan != null ? Number(row.totalAgentsYongsan) : 0,
+        totalAgentsGwangju: row.totalAgentsGwangju != null ? Number(row.totalAgentsGwangju) : 0,
+        totalEvaluations: row.totalEvaluations != null ? Number(row.totalEvaluations) : 0,
+        watchlistYongsan: row.watchlistYongsan != null ? Number(row.watchlistYongsan) : 0,
+        watchlistGwangju: row.watchlistGwangju != null ? Number(row.watchlistGwangju) : 0,
+        attitudeErrorRate: isNaN(attitudeErrorRate) ? 0 : attitudeErrorRate,
+        businessErrorRate: isNaN(businessErrorRate) ? 0 : businessErrorRate,
         overallErrorRate: Number((attitudeErrorRate + businessErrorRate).toFixed(2)),
         date: queryDate,
       },
     };
+    
+    // 결과 유효성 검사
+    if (!result.data || typeof result.data !== 'object') {
+      console.error(`[BigQuery] Invalid result data structure:`, result);
+      return {
+        success: true,
+        data: createDefaultStats(queryDate),
+      };
+    }
     
     console.log(`[BigQuery] Final result:`, JSON.stringify(result.data, null, 2));
     

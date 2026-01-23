@@ -133,6 +133,22 @@ export async function GET(request: Request) {
       )
     }
 
+    // data가 없거나 빈 객체인 경우 확인
+    if (!result.data || (typeof result.data === 'object' && Object.keys(result.data).length === 0)) {
+      console.warn(`[API] Empty or missing data for type ${type}`)
+      // dashboard 타입의 경우 기본값 반환
+      if (type === 'dashboard') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Dashboard stats data is empty or missing',
+            type 
+          },
+          { status: 500, headers: corsHeaders }
+        )
+      }
+    }
+
     return NextResponse.json(
       { success: true, data: result.data, type },
       { headers: corsHeaders }

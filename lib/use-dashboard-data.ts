@@ -91,16 +91,36 @@ export function useDashboardData(
       console.log('[Dashboard] Centers response:', centersData)
       console.log('[Dashboard] Trend response:', trendDataRes)
 
+      // Stats 데이터 유효성 검사 강화
       if (statsData.success && statsData.data) {
-        console.log('[Dashboard] Stats data:', statsData.data)
-        setStats(statsData.data)
-        setError(null) // 성공 시 에러 초기화
+        // data가 빈 객체가 아니고 필수 필드가 있는지 확인
+        const data = statsData.data as DashboardStats
+        const hasRequiredFields = 
+          typeof data.totalAgentsYongsan === 'number' &&
+          typeof data.totalAgentsGwangju === 'number' &&
+          typeof data.totalEvaluations === 'number'
+        
+        if (hasRequiredFields) {
+          console.log('[Dashboard] Stats data:', data)
+          setStats(data)
+          setError(null) // 성공 시 에러 초기화
+        } else {
+          console.warn('[Dashboard] Stats data missing required fields:', data)
+          // 필수 필드가 없으면 기본값 사용
+          setStats(defaultStats)
+          setError('Stats data is missing required fields')
+        }
       } else {
         console.warn('[Dashboard] Stats fetch failed:', statsData)
         // 에러는 표시하지만 다른 데이터는 계속 로드
         if (statsData.error) {
           console.error('[Dashboard] Stats error:', statsData.error)
+          setError(statsData.error)
+        } else {
+          setError('Failed to fetch dashboard stats')
         }
+        // 기본값 설정
+        setStats(defaultStats)
       }
 
       if (centersData.success && centersData.data) {
