@@ -139,7 +139,7 @@ export async function getDashboardStats(targetDate?: string): Promise<{ success:
       SELECT
         COALESCE(SUM(CASE WHEN ds.center = '용산' THEN ds.agent_count ELSE 0 END), 0) as totalAgentsYongsan,
         COALESCE(SUM(CASE WHEN ds.center = '광주' THEN ds.agent_count ELSE 0 END), 0) as totalAgentsGwangju,
-        COALESCE(ye.yesterday_count, 0) as totalEvaluations,
+        MAX(COALESCE(ye.yesterday_count, 0)) as totalEvaluations,
         COALESCE(SUM(CASE WHEN wc.center = '용산' THEN wc.watchlist_count ELSE 0 END), 0) as watchlistYongsan,
         COALESCE(SUM(CASE WHEN wc.center = '광주' THEN wc.watchlist_count ELSE 0 END), 0) as watchlistGwangju,
         ROUND(SAFE_DIVIDE(SUM(ds.total_attitude_errors), SUM(ds.evaluation_count) * 5) * 100, 2) as attitudeErrorRate,
@@ -494,16 +494,8 @@ export async function getAgents(filters?: {
       params.channel = filters.channel;
     }
     if (filters?.tenure && filters.tenure !== 'all') {
-      // tenure 필터: tenure_group 또는 tenure_months 기반 필터링
-      evalWhereClause += ` AND (
-        tenure_group = @tenure
-        OR (tenure_group IS NULL AND (
-          (@tenure = '3개월 미만' AND (tenure_months IS NULL OR tenure_months < 3))
-          OR (@tenure = '3개월 이상' AND tenure_months >= 3 AND tenure_months < 6)
-          OR (@tenure = '6개월 이상' AND tenure_months >= 6 AND tenure_months < 12)
-          OR (@tenure = '12개월 이상' AND tenure_months >= 12)
-        ))
-      )`;
+      // tenure 필터: tenure_group 기반 필터링
+      evalWhereClause += ` AND (tenure_group = @tenure OR (tenure_group IS NULL AND @tenure = '3개월 미만'))`;
       params.tenure = filters.tenure;
     }
 
@@ -514,16 +506,9 @@ export async function getAgents(filters?: {
         center,
         service,
         channel,
-        -- 근속기간: tenure_months와 tenure_group 필드 사용
-        MAX(COALESCE(tenure_months, 0)) as tenureMonths,
-        MAX(COALESCE(tenure_group,
-          CASE
-            WHEN tenure_months IS NULL OR tenure_months < 3 THEN '3개월 미만'
-            WHEN tenure_months < 6 THEN '3개월 이상'
-            WHEN tenure_months < 12 THEN '6개월 이상'
-            ELSE '12개월 이상'
-          END
-        )) as tenureGroup,
+        -- 근속기간: tenure_group 필드 사용
+        0 as tenureMonths,
+        MAX(COALESCE(tenure_group, '3개월 미만')) as tenureGroup,
         COUNT(*) as totalEvaluations,
         ROUND(SAFE_DIVIDE(SUM(attitude_error_count), COUNT(*) * 5) * 100, 2) as attitudeErrorRate,
         ROUND(SAFE_DIVIDE(SUM(business_error_count), COUNT(*) * 11) * 100, 2) as opsErrorRate,
@@ -737,15 +722,8 @@ export async function getWatchList(filters?: {
           center,
           service,
           channel,
-          MAX(COALESCE(tenure_months, 0)) as tenure_months,
-          MAX(COALESCE(tenure_group,
-            CASE
-              WHEN tenure_months IS NULL OR tenure_months < 3 THEN '3개월 미만'
-              WHEN tenure_months < 6 THEN '3개월 이상'
-              WHEN tenure_months < 12 THEN '6개월 이상'
-              ELSE '12개월 이상'
-            END
-          )) as tenure_group,
+          0 as tenure_months,
+          MAX(COALESCE(tenure_group, '3개월 미만')) as tenure_group,
           COUNT(*) as evaluation_count,
           SUM(attitude_error_count) as attitude_errors,
           SUM(business_error_count) as ops_errors,
@@ -2617,15 +2595,8 @@ export async function getTenureStats(filters?: {
           center,
           service,
           channel,
-          -- tenure_group이 NULL인 경우 tenure_months로 계산
-          CASE
-            WHEN tenure_group IS NOT NULL THEN tenure_group
-            WHEN tenure_months IS NULL THEN '3개월 미만'
-            WHEN tenure_months < 3 THEN '3개월 미만'
-            WHEN tenure_months < 6 THEN '3개월 이상'
-            WHEN tenure_months < 12 THEN '6개월 이상'
-            ELSE '12개월 이상'
-          END as tenure_group,
+          -- tenure_group 사용 (NULL인 경우 기본값)
+          COALESCE(tenure_group, '3개월 미만') as tenure_group,
           -- 항목별 오류 카운트
           SUM(CAST(COALESCE(greeting_error, false) AS INT64)) as att1,
           SUM(CAST(COALESCE(empathy_error, false) AS INT64)) as att2,
@@ -2648,7 +2619,7 @@ export async function getTenureStats(filters?: {
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY center, service, channel, tenure_group, tenure_months
+        GROUP BY center, service, channel, tenure_group
       )
       SELECT
         center,
