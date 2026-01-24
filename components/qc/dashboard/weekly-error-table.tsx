@@ -33,6 +33,7 @@ export function WeeklyErrorTable() {
       id: `w${idx + 1}`,
       label: weekData.weekLabel,
       shortLabel: weekData.weekLabel,
+      dateRange: weekData.dateRange || '',  // 날짜 범위 추가
       week: weekData.week,
     }))
 
@@ -127,10 +128,10 @@ export function WeeklyErrorTable() {
                 <th className="sticky left-0 bg-[#1e3a5f]/5 text-left p-2 font-medium text-slate-700 min-w-[140px]">
                   항목
                 </th>
-                {weeks.map((week) => (
+                {weeks.map((week, idx) => (
                   <th key={week.id} className="p-2 font-medium text-slate-600 text-center" colSpan={2}>
-                    <div className="text-[10px] text-slate-400">{week.label}</div>
-                    <div>{week.shortLabel}</div>
+                    <div className="text-xs font-semibold">{idx + 1}주차</div>
+                    <div className="text-[10px] text-slate-500">{week.dateRange}</div>
                   </th>
                 ))}
                 <th

@@ -1337,6 +1337,7 @@ export async function getDailyErrors(filters?: {
 export interface WeeklyErrorData {
   week: string
   weekLabel: string
+  dateRange?: string  // 날짜 범위 (예: "1/9~1/15")
   items: Array<{
     itemId: string
     itemName: string
@@ -1354,7 +1355,7 @@ export async function getWeeklyErrors(filters?: {
 }): Promise<{ success: boolean; data?: WeeklyErrorData[]; error?: string }> {
   try {
     const bigquery = getBigQueryClient()
-    
+
     // 기본값: 최근 6주
     let startDate = filters?.startDate
     let endDate = filters?.endDate
@@ -1365,10 +1366,10 @@ export async function getWeeklyErrors(filters?: {
       start.setDate(start.getDate() - 42) // 6주
       startDate = start.toISOString().split('T')[0]
     }
-    
+
     let whereClause = 'WHERE evaluation_date BETWEEN @startDate AND @endDate'
     const params: any = { startDate, endDate }
-    
+
     if (filters?.center && filters.center !== 'all') {
       whereClause += ' AND center = @center'
       params.center = filters.center
@@ -1381,242 +1382,211 @@ export async function getWeeklyErrors(filters?: {
       whereClause += ' AND channel = @channel'
       params.channel = filters.channel
     }
-    
-    // 주차별 집계 (ISO 주 사용)
+
+    // 주차별 집계 (목~수 기준: DATE_ADD로 +3일 하면 목요일이 주 시작일로 계산됨)
+    // 주간 시작일(목요일) 계산: DATE_TRUNC(DATE_ADD(date, INTERVAL 3 DAY), WEEK) - 3일
     const query = `
       WITH weekly_data AS (
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          -- 목~수 기준 주차 계산: 날짜에 +3일 해서 ISO 주 적용 후 week key 생성
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'att1' as item_id,
           '첫인사/끝인사 누락' as item_name,
           SUM(CAST(greeting_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
+        GROUP BY week_start
         
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'att2' as item_id,
           '공감표현 누락' as item_name,
           SUM(CAST(empathy_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'att3' as item_id,
           '사과표현 누락' as item_name,
           SUM(CAST(apology_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'att4' as item_id,
           '추가문의 누락' as item_name,
           SUM(CAST(additional_inquiry_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'att5' as item_id,
           '불친절' as item_name,
           SUM(CAST(unkind_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err1' as item_id,
           '상담유형 오설정' as item_name,
           SUM(CAST(consult_type_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err2' as item_id,
           '가이드 미준수' as item_name,
           SUM(CAST(guide_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err3' as item_id,
           '본인확인 누락' as item_name,
           SUM(CAST(identity_check_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err4' as item_id,
           '필수탐색 누락' as item_name,
           SUM(CAST(required_search_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err5' as item_id,
           '오안내' as item_name,
           SUM(CAST(wrong_guide_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err6' as item_id,
           '전산 처리 누락' as item_name,
           SUM(CAST(process_missing_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err7' as item_id,
           '전산 처리 미완료' as item_name,
           SUM(CAST(process_incomplete_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err8' as item_id,
           '전산 조작 미흡' as item_name,
           SUM(CAST(system_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err9' as item_id,
           '콜픽트림ID 매핑 누락' as item_name,
           SUM(CAST(id_mapping_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err10' as item_id,
           '플래그키워드 누락' as item_name,
           SUM(CAST(flag_keyword_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
-        
+        GROUP BY week_start
+
         UNION ALL
-        
+
         SELECT
-          FORMAT_DATE('%Y-W%V', evaluation_date) as week,
-          EXTRACT(YEAR FROM evaluation_date) as year,
-          EXTRACT(WEEK FROM evaluation_date) as week_num,
+          DATE_SUB(DATE_TRUNC(DATE_ADD(evaluation_date, INTERVAL 3 DAY), WEEK(MONDAY)), INTERVAL 3 DAY) as week_start,
           'err11' as item_id,
           '상담이력 기재 미흡' as item_name,
           SUM(CAST(history_error AS INT64)) as error_count,
           COUNT(*) as total_evaluations
         FROM \`${DATASET_ID}.evaluations\`
         ${whereClause}
-        GROUP BY week, year, week_num
+        GROUP BY week_start
       )
       SELECT
-        week,
-        year,
-        week_num,
+        FORMAT_DATE('%Y-%m-%d', week_start) as week_start_str,
+        FORMAT_DATE('%Y-%m-%d', DATE_ADD(week_start, INTERVAL 6 DAY)) as week_end_str,
         item_id,
         item_name,
         error_count,
         ROUND(SAFE_DIVIDE(error_count, total_evaluations) * 100, 1) as error_rate
       FROM weekly_data
-      ORDER BY year DESC, week_num DESC, item_id
+      ORDER BY week_start DESC, item_id
     `
     
     const options = {
@@ -1626,32 +1596,50 @@ export async function getWeeklyErrors(filters?: {
     }
     
     const [rows] = await bigquery.query(options)
-    
+
     // 주차별로 그룹화
     const weekMap = new Map<string, WeeklyErrorData>()
-    
+
     rows.forEach((row: any) => {
-      const week = row.week
-      const weekLabel = `${row.year}년 ${row.week_num}주차`
-      
-      if (!weekMap.has(week)) {
-        weekMap.set(week, {
-          week,
+      const weekStartStr = row.week_start_str
+      const weekEndStr = row.week_end_str
+
+      // 날짜 파싱
+      const startDate = new Date(weekStartStr)
+      const endDate = new Date(weekEndStr)
+
+      // 날짜 범위 형식: M/D~M/D
+      const startMonth = startDate.getMonth() + 1
+      const startDay = startDate.getDate()
+      const endMonth = endDate.getMonth() + 1
+      const endDay = endDate.getDate()
+      const dateRange = `${startMonth}/${startDay}~${endMonth}/${endDay}`
+
+      // 주차 계산 (연도 기준)
+      const weekOfYear = Math.ceil(
+        ((startDate.getTime() - new Date(startDate.getFullYear(), 0, 1).getTime()) / 86400000 + 1) / 7
+      )
+      const weekLabel = `${startDate.getFullYear()}년 ${weekOfYear}주차`
+
+      if (!weekMap.has(weekStartStr)) {
+        weekMap.set(weekStartStr, {
+          week: weekStartStr,
           weekLabel,
+          dateRange,
           items: [],
         })
       }
-      
-      weekMap.get(week)!.items.push({
+
+      weekMap.get(weekStartStr)!.items.push({
         itemId: row.item_id,
         itemName: row.item_name,
         errorCount: Number(row.error_count) || 0,
         errorRate: Number(row.error_rate) || 0,
       })
     })
-    
-    const result = Array.from(weekMap.values()).sort((a, b) => 
-      b.week.localeCompare(a.week)
+
+    const result = Array.from(weekMap.values()).sort((a, b) =>
+      a.week.localeCompare(b.week)
     )
     
     return { success: true, data: result }
@@ -2114,44 +2102,187 @@ export async function getAgentDetail(
       { key: 'history_errors', id: 'err11', name: '상담이력 기재 미흡', category: '오상담/오처리' as const },
     ];
     
-    const itemErrors = itemMap
-      .map(item => ({
-        itemId: item.id,
-        itemName: item.name,
-        errorCount: Number(itemErrorsRows[0]?.[item.key]) || 0,
-        category: item.category,
-      }))
-      .filter(item => item.errorCount > 0);
-    
-    // 3. 상담사 이름 조회
+    // 총 평가 건수 계산
+    const totalEvaluations = dailyTrendRows.reduce((sum: number, row: any) => sum + (Number(row.total_evaluations) || 0), 0);
+
+    // 모든 항목 반환 (오류가 없는 항목도 포함)
+    const itemErrors = itemMap.map(item => ({
+      itemId: item.id,
+      itemName: item.name,
+      errorCount: Number(itemErrorsRows[0]?.[item.key]) || 0,
+      category: item.category,
+      // 오류율 계산: 해당 항목 오류 건수 / 총 평가 건수
+      errorRate: totalEvaluations > 0
+        ? Number(((Number(itemErrorsRows[0]?.[item.key]) || 0) / totalEvaluations * 100).toFixed(2))
+        : 0,
+    }));
+
+    // 3. 전일 데이터 조회 (오늘 날짜 기준으로 전일 계산)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const dayBeforeYesterday = new Date();
+    dayBeforeYesterday.setDate(dayBeforeYesterday.getDate() - 2);
+    const dayBeforeYesterdayStr = dayBeforeYesterday.toISOString().split('T')[0];
+
+    const previousDayQuery = `
+      WITH current_day AS (
+        SELECT
+          SUM(CAST(greeting_error AS INT64)) as greeting_errors,
+          SUM(CAST(empathy_error AS INT64)) as empathy_errors,
+          SUM(CAST(apology_error AS INT64)) as apology_errors,
+          SUM(CAST(additional_inquiry_error AS INT64)) as additional_inquiry_errors,
+          SUM(CAST(unkind_error AS INT64)) as unkind_errors,
+          SUM(CAST(consult_type_error AS INT64)) as consult_type_errors,
+          SUM(CAST(guide_error AS INT64)) as guide_errors,
+          SUM(CAST(identity_check_error AS INT64)) as identity_check_errors,
+          SUM(CAST(required_search_error AS INT64)) as required_search_errors,
+          SUM(CAST(wrong_guide_error AS INT64)) as wrong_guide_errors,
+          SUM(CAST(process_missing_error AS INT64)) as process_missing_errors,
+          SUM(CAST(process_incomplete_error AS INT64)) as process_incomplete_errors,
+          SUM(CAST(system_error AS INT64)) as system_errors,
+          SUM(CAST(id_mapping_error AS INT64)) as id_mapping_errors,
+          SUM(CAST(flag_keyword_error AS INT64)) as flag_keyword_errors,
+          SUM(CAST(history_error AS INT64)) as history_errors,
+          COUNT(*) as total_count,
+          ROUND(SAFE_DIVIDE(SUM(attitude_error_count) + SUM(business_error_count), COUNT(*) * 16) * 100, 2) as overall_error_rate
+        FROM \`${DATASET_ID}.evaluations\`
+        WHERE agent_id = @agentId
+          AND evaluation_date = @currentDate
+      ),
+      prev_day AS (
+        SELECT
+          SUM(CAST(greeting_error AS INT64)) as greeting_errors,
+          SUM(CAST(empathy_error AS INT64)) as empathy_errors,
+          SUM(CAST(apology_error AS INT64)) as apology_errors,
+          SUM(CAST(additional_inquiry_error AS INT64)) as additional_inquiry_errors,
+          SUM(CAST(unkind_error AS INT64)) as unkind_errors,
+          SUM(CAST(consult_type_error AS INT64)) as consult_type_errors,
+          SUM(CAST(guide_error AS INT64)) as guide_errors,
+          SUM(CAST(identity_check_error AS INT64)) as identity_check_errors,
+          SUM(CAST(required_search_error AS INT64)) as required_search_errors,
+          SUM(CAST(wrong_guide_error AS INT64)) as wrong_guide_errors,
+          SUM(CAST(process_missing_error AS INT64)) as process_missing_errors,
+          SUM(CAST(process_incomplete_error AS INT64)) as process_incomplete_errors,
+          SUM(CAST(system_error AS INT64)) as system_errors,
+          SUM(CAST(id_mapping_error AS INT64)) as id_mapping_errors,
+          SUM(CAST(flag_keyword_error AS INT64)) as flag_keyword_errors,
+          SUM(CAST(history_error AS INT64)) as history_errors,
+          COUNT(*) as total_count,
+          ROUND(SAFE_DIVIDE(SUM(attitude_error_count) + SUM(business_error_count), COUNT(*) * 16) * 100, 2) as overall_error_rate
+        FROM \`${DATASET_ID}.evaluations\`
+        WHERE agent_id = @agentId
+          AND evaluation_date = @prevDate
+      )
+      SELECT
+        c.total_count as current_total,
+        c.overall_error_rate as current_rate,
+        p.total_count as prev_total,
+        p.overall_error_rate as prev_rate,
+        c.greeting_errors as c_greeting, p.greeting_errors as p_greeting,
+        c.empathy_errors as c_empathy, p.empathy_errors as p_empathy,
+        c.apology_errors as c_apology, p.apology_errors as p_apology,
+        c.additional_inquiry_errors as c_additional, p.additional_inquiry_errors as p_additional,
+        c.unkind_errors as c_unkind, p.unkind_errors as p_unkind,
+        c.consult_type_errors as c_consult, p.consult_type_errors as p_consult,
+        c.guide_errors as c_guide, p.guide_errors as p_guide,
+        c.identity_check_errors as c_identity, p.identity_check_errors as p_identity,
+        c.required_search_errors as c_required, p.required_search_errors as p_required,
+        c.wrong_guide_errors as c_wrong, p.wrong_guide_errors as p_wrong,
+        c.process_missing_errors as c_missing, p.process_missing_errors as p_missing,
+        c.process_incomplete_errors as c_incomplete, p.process_incomplete_errors as p_incomplete,
+        c.system_errors as c_system, p.system_errors as p_system,
+        c.id_mapping_errors as c_mapping, p.id_mapping_errors as p_mapping,
+        c.flag_keyword_errors as c_flag, p.flag_keyword_errors as p_flag,
+        c.history_errors as c_history, p.history_errors as p_history
+      FROM current_day c, prev_day p
+    `;
+
+    const [prevDayRows] = await bigquery.query({
+      query: previousDayQuery,
+      params: {
+        agentId,
+        currentDate: yesterdayStr,
+        prevDate: dayBeforeYesterdayStr,
+      },
+      location: 'asia-northeast3',
+    });
+
+    const prevDayData = prevDayRows[0] || {};
+    const prevDayComparison = {
+      currentTotal: Number(prevDayData.current_total) || 0,
+      currentRate: Number(prevDayData.current_rate) || 0,
+      prevTotal: Number(prevDayData.prev_total) || 0,
+      prevRate: Number(prevDayData.prev_rate) || 0,
+      rateDiff: prevDayData.current_rate && prevDayData.prev_rate
+        ? Number((Number(prevDayData.current_rate) - Number(prevDayData.prev_rate)).toFixed(2))
+        : null,
+    };
+
+    // 항목별 전일 대비 계산
+    const itemDiffMap: Record<string, { currentCount: number; prevCount: number; diff: number }> = {
+      'att1': { currentCount: Number(prevDayData.c_greeting) || 0, prevCount: Number(prevDayData.p_greeting) || 0, diff: 0 },
+      'att2': { currentCount: Number(prevDayData.c_empathy) || 0, prevCount: Number(prevDayData.p_empathy) || 0, diff: 0 },
+      'att3': { currentCount: Number(prevDayData.c_apology) || 0, prevCount: Number(prevDayData.p_apology) || 0, diff: 0 },
+      'att4': { currentCount: Number(prevDayData.c_additional) || 0, prevCount: Number(prevDayData.p_additional) || 0, diff: 0 },
+      'att5': { currentCount: Number(prevDayData.c_unkind) || 0, prevCount: Number(prevDayData.p_unkind) || 0, diff: 0 },
+      'err1': { currentCount: Number(prevDayData.c_consult) || 0, prevCount: Number(prevDayData.p_consult) || 0, diff: 0 },
+      'err2': { currentCount: Number(prevDayData.c_guide) || 0, prevCount: Number(prevDayData.p_guide) || 0, diff: 0 },
+      'err3': { currentCount: Number(prevDayData.c_identity) || 0, prevCount: Number(prevDayData.p_identity) || 0, diff: 0 },
+      'err4': { currentCount: Number(prevDayData.c_required) || 0, prevCount: Number(prevDayData.p_required) || 0, diff: 0 },
+      'err5': { currentCount: Number(prevDayData.c_wrong) || 0, prevCount: Number(prevDayData.p_wrong) || 0, diff: 0 },
+      'err6': { currentCount: Number(prevDayData.c_missing) || 0, prevCount: Number(prevDayData.p_missing) || 0, diff: 0 },
+      'err7': { currentCount: Number(prevDayData.c_incomplete) || 0, prevCount: Number(prevDayData.p_incomplete) || 0, diff: 0 },
+      'err8': { currentCount: Number(prevDayData.c_system) || 0, prevCount: Number(prevDayData.p_system) || 0, diff: 0 },
+      'err9': { currentCount: Number(prevDayData.c_mapping) || 0, prevCount: Number(prevDayData.p_mapping) || 0, diff: 0 },
+      'err10': { currentCount: Number(prevDayData.c_flag) || 0, prevCount: Number(prevDayData.p_flag) || 0, diff: 0 },
+      'err11': { currentCount: Number(prevDayData.c_history) || 0, prevCount: Number(prevDayData.p_history) || 0, diff: 0 },
+    };
+
+    // diff 계산
+    Object.keys(itemDiffMap).forEach(key => {
+      const item = itemDiffMap[key];
+      item.diff = item.currentCount - item.prevCount;
+    });
+
+    // itemErrors에 전일대비 추가
+    const itemErrorsWithDiff = itemErrors.map(item => ({
+      ...item,
+      prevDayDiff: itemDiffMap[item.itemId]?.diff || 0,
+    }));
+
+    // 4. 상담사 이름 조회
     const agentNameQuery = `
       SELECT DISTINCT agent_name
       FROM \`${DATASET_ID}.evaluations\`
       WHERE agent_id = @agentId
       LIMIT 1
     `;
-    
+
     const [agentNameRows] = await bigquery.query({
       query: agentNameQuery,
       params: { agentId },
       location: 'asia-northeast3',
     });
-    
+
     const agentName = agentNameRows[0]?.agent_name || agentId;
-    
+
     // 결과 변환
     const dailyTrend = dailyTrendRows.map((row: any) => ({
       date: row.date?.value || row.date || '',
       errorRate: Number(row.error_rate) || 0,
+      totalEvaluations: Number(row.total_evaluations) || 0,
     }));
-    
+
     return {
       success: true,
       data: {
         agentId,
         agentName,
+        totalEvaluations,
         dailyTrend,
-        itemErrors,
+        itemErrors: itemErrorsWithDiff,
+        prevDayComparison,
       },
     };
   } catch (error) {

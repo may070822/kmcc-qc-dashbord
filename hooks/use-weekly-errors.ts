@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react"
 interface WeeklyErrorData {
   week: string
   weekLabel: string
+  dateRange?: string  // 날짜 범위 (예: "1/9~1/15")
   items: Array<{
     itemId: string
     itemName: string

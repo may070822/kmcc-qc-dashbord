@@ -77,17 +77,35 @@ export function AgentDetailModal({ open, onOpenChange, agent }: AgentDetailModal
       name: evaluationItem?.shortName || item.itemName,
       fullName: evaluationItem?.name || item.itemName,
       count: item.errorCount,
+      errorRate: item.errorRate || 0,
       category: item.category,
+      prevDayDiff: item.prevDayDiff || 0,
     }
   }) || evaluationItems.map((item) => ({
     name: item.shortName,
     fullName: item.name,
     count: 0,
+    errorRate: 0,
     category: item.category,
+    prevDayDiff: 0,
   }))
 
+  // 전일 대비 데이터
+  const prevDayComparison = agentDetailData?.prevDayComparison
+  const prevDayRateDiff = prevDayComparison?.rateDiff
+
+  // 오류 건수 기준으로 취약/우수 항목 정렬
   const weakItems = [...itemErrorData].sort((a, b) => b.count - a.count).slice(0, 3)
-  const strongItems = [...itemErrorData].sort((a, b) => a.count - b.count).slice(0, 3)
+  const strongItems = [...itemErrorData].filter(item => item.count === 0).slice(0, 3)
+  // 우수 항목이 3개 미만이면 오류 건수가 가장 적은 항목으로 채움
+  if (strongItems.length < 3) {
+    const remaining = [...itemErrorData]
+      .filter(item => !strongItems.includes(item))
+      .sort((a, b) => a.count - b.count)
+      .slice(0, 3 - strongItems.length)
+    strongItems.push(...remaining)
+  }
+  const maxErrorCount = Math.max(...itemErrorData.map(i => i.count), 1)
 
   const COLORS = {
     attitude: "#1e3a5f",
@@ -171,20 +189,20 @@ export function AgentDetailModal({ open, onOpenChange, agent }: AgentDetailModal
             <Card className="border-slate-200 bg-white">
               <CardContent className="p-4">
                 <div className="text-xs text-slate-500 mb-1">전일 대비</div>
-                {agent.trend === null || agent.trend === undefined ? (
+                {prevDayRateDiff === null || prevDayRateDiff === undefined ? (
                   <p className="text-xl font-bold text-muted-foreground">-</p>
-                ) : agent.trend === 0 ? (
+                ) : prevDayRateDiff === 0 ? (
                   <p className="text-xl font-bold text-slate-600">0.00%</p>
                 ) : (
                   <p
                     className={cn(
                       "flex items-center gap-1 text-xl font-bold",
-                      agent.trend > 0 ? "text-red-600" : "text-green-600",
+                      prevDayRateDiff > 0 ? "text-red-600" : "text-green-600",
                     )}
                   >
-                    {agent.trend > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                    {agent.trend > 0 ? "+" : ""}
-                    {agent.trend.toFixed(2)}%
+                    {prevDayRateDiff > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    {prevDayRateDiff > 0 ? "+" : ""}
+                    {prevDayRateDiff.toFixed(2)}%
                   </p>
                 )}
               </CardContent>
@@ -257,27 +275,25 @@ export function AgentDetailModal({ open, onOpenChange, agent }: AgentDetailModal
                       </TableHeader>
                       <TableBody>
                         {itemErrorData.map((item, index) => {
-                          const totalEvals = agentDetailData?.dailyTrend.length || agent.totalCalls || 1
-                          const errorRate = totalEvals > 0 ? ((item.count / totalEvals) * 100).toFixed(2) : "0.00"
-                          // 전일 대비 계산 (현재는 0으로 표시, 향후 API에서 전일 데이터를 받아서 계산)
-                          const dailyChange = 0 // TODO: agent-detail API에서 전일 대비 데이터 제공 시 사용
-                          const isIncrease = Number(dailyChange) > 0
-                          
+                          const errorRate = item.errorRate?.toFixed(2) || "0.00"
+                          const dailyChange = item.prevDayDiff || 0
+                          const isIncrease = dailyChange > 0
+
                           return (
-                            <TableRow 
-                              key={item.name} 
+                            <TableRow
+                              key={item.name}
                               className={cn(
                                 "hover:bg-slate-50",
                                 index % 2 === 1 && "bg-slate-50/50"
                               )}
                             >
                               <TableCell className="text-center py-2.5">
-                                <Badge 
-                                  variant="outline" 
+                                <Badge
+                                  variant="outline"
                                   className={cn(
                                     "text-[10px] px-1.5 py-0.5 font-medium",
-                                    item.category === "상담태도" 
-                                      ? "border-[#1e3a5f] text-[#1e3a5f] bg-[#1e3a5f]/5" 
+                                    item.category === "상담태도"
+                                      ? "border-[#1e3a5f] text-[#1e3a5f] bg-[#1e3a5f]/5"
                                       : "border-[#f59e0b] text-[#f59e0b] bg-[#f59e0b]/5"
                                   )}
                                 >
@@ -286,7 +302,7 @@ export function AgentDetailModal({ open, onOpenChange, agent }: AgentDetailModal
                               </TableCell>
                               <TableCell className="py-2.5">
                                 <div className="flex items-center gap-2">
-                                  <span 
+                                  <span
                                     className={cn(
                                       "h-2 w-2 rounded-full flex-shrink-0",
                                       item.category === "상담태도" ? "bg-[#1e3a5f]" : "bg-[#f59e0b]"
@@ -302,17 +318,21 @@ export function AgentDetailModal({ open, onOpenChange, agent }: AgentDetailModal
                                 <span className="text-sm font-semibold text-slate-900">{errorRate}%</span>
                               </TableCell>
                               <TableCell className="text-right py-2.5">
-                                <span className={cn(
-                                  "text-sm font-medium inline-flex items-center gap-0.5",
-                                  isIncrease ? "text-red-600" : "text-green-600"
-                                )}>
-                                  {isIncrease ? (
-                                    <TrendingUp className="h-3 w-3" />
-                                  ) : (
-                                    <TrendingDown className="h-3 w-3" />
-                                  )}
-                                  {isIncrease ? "+" : ""}{dailyChange.toFixed(2)}%
-                                </span>
+                                {dailyChange === 0 ? (
+                                  <span className="text-sm font-medium text-slate-500">-</span>
+                                ) : (
+                                  <span className={cn(
+                                    "text-sm font-medium inline-flex items-center gap-0.5",
+                                    isIncrease ? "text-red-600" : "text-green-600"
+                                  )}>
+                                    {isIncrease ? (
+                                      <TrendingUp className="h-3 w-3" />
+                                    ) : (
+                                      <TrendingDown className="h-3 w-3" />
+                                    )}
+                                    {isIncrease ? "+" : ""}{dailyChange}건
+                                  </span>
+                                )}
                               </TableCell>
                             </TableRow>
                           )
@@ -347,15 +367,15 @@ export function AgentDetailModal({ open, onOpenChange, agent }: AgentDetailModal
                     {weakItems.map((item, i) => (
                       <div key={item.name} className="space-y-1.5">
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-xs font-medium text-slate-700 leading-tight flex-1 min-w-0">
+                          <span className="text-xs font-medium text-slate-700 leading-tight flex-1 min-w-0 truncate" title={item.fullName}>
                             {i + 1}. {item.fullName}
                           </span>
-                          <span className="text-xs font-bold text-red-600 whitespace-nowrap">{item.count}건</span>
+                          <span className="text-xs font-bold text-red-600 whitespace-nowrap flex-shrink-0">{item.count}건</span>
                         </div>
-                        <div className="h-1.5 w-full rounded-full bg-red-100">
+                        <div className="h-1.5 w-full rounded-full bg-red-100 overflow-hidden">
                           <div
                             className="h-1.5 rounded-full bg-red-500 transition-all"
-                            style={{ width: `${(item.count / 10) * 100}%` }}
+                            style={{ width: `${Math.min((item.count / maxErrorCount) * 100, 100)}%` }}
                           />
                         </div>
                       </div>
@@ -374,15 +394,15 @@ export function AgentDetailModal({ open, onOpenChange, agent }: AgentDetailModal
                     {strongItems.map((item, i) => (
                       <div key={item.name} className="space-y-1.5">
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-xs font-medium text-slate-700 leading-tight flex-1 min-w-0">
+                          <span className="text-xs font-medium text-slate-700 leading-tight flex-1 min-w-0 truncate" title={item.fullName}>
                             {i + 1}. {item.fullName}
                           </span>
-                          <span className="text-xs font-bold text-green-600 whitespace-nowrap">{item.count}건</span>
+                          <span className="text-xs font-bold text-green-600 whitespace-nowrap flex-shrink-0">{item.count}건</span>
                         </div>
-                        <div className="h-1.5 w-full rounded-full bg-green-100">
+                        <div className="h-1.5 w-full rounded-full bg-green-100 overflow-hidden">
                           <div
                             className="h-1.5 rounded-full bg-green-500 transition-all"
-                            style={{ width: `${100 - (item.count / 10) * 100}%` }}
+                            style={{ width: `${Math.max(100 - (item.count / maxErrorCount) * 100, 10)}%` }}
                           />
                         </div>
                       </div>

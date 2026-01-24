@@ -5,16 +5,27 @@ import { useState, useEffect, useCallback } from "react"
 interface AgentDetailStats {
   agentId: string
   agentName: string
+  totalEvaluations: number
   dailyTrend: Array<{
     date: string
     errorRate: number
+    totalEvaluations?: number
   }>
   itemErrors: Array<{
     itemId: string
     itemName: string
     errorCount: number
+    errorRate: number
     category: "상담태도" | "오상담/오처리"
+    prevDayDiff?: number
   }>
+  prevDayComparison?: {
+    currentTotal: number
+    currentRate: number
+    prevTotal: number
+    prevRate: number
+    rateDiff: number | null
+  }
 }
 
 interface UseAgentDetailOptions {
