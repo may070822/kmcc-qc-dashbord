@@ -58,19 +58,24 @@ export function OverviewSection({
   const attitudeRate = attitudeErrorRate || 0
   const consultRate = consultErrorRate || 0
   const overallRate = overallErrorRate || 0
-  
+
   const totalWatchlist = watchlistY + watchlistG
-  
-  // 센터별 오류율 추출
+
+  // 센터별 오류율: 전달받은 prop 우선 사용, 없으면 centerStats에서 추출
   const yongsanCenter = centerStats?.find(c => c.name === '용산')
   const gwangjuCenter = centerStats?.find(c => c.name === '광주')
-  
-  const yongsanAttitudeRate = yongsanCenter?.attitudeErrorRate || 0
-  const gwangjuAttitudeRate = gwangjuCenter?.attitudeErrorRate || 0
-  const yongsanBusinessRate = yongsanCenter?.businessErrorRate || 0
-  const gwangjuBusinessRate = gwangjuCenter?.businessErrorRate || 0
-  const yongsanOverallRate = yongsanCenter?.overallErrorRate || 0
-  const gwangjuOverallRate = gwangjuCenter?.overallErrorRate || 0
+
+  // 상담태도 오류율 (센터별)
+  const yongsanAttitudeRate = attitudeErrorByCenter?.yongsan ?? yongsanCenter?.attitudeErrorRate ?? 0
+  const gwangjuAttitudeRate = attitudeErrorByCenter?.gwangju ?? gwangjuCenter?.attitudeErrorRate ?? 0
+
+  // 오상담/오처리 오류율 (센터별)
+  const yongsanBusinessRate = consultErrorByCenter?.yongsan ?? yongsanCenter?.businessErrorRate ?? 0
+  const gwangjuBusinessRate = consultErrorByCenter?.gwangju ?? gwangjuCenter?.businessErrorRate ?? 0
+
+  // 전체 오류율 (센터별)
+  const yongsanOverallRate = overallErrorByCenter?.yongsan ?? yongsanCenter?.overallErrorRate ?? 0
+  const gwangjuOverallRate = overallErrorByCenter?.gwangju ?? gwangjuCenter?.overallErrorRate ?? 0
 
   return (
     <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
