@@ -33,12 +33,19 @@ export function FocusManagement() {
     return (watchlistData || []).map((agent) => {
       // 근속기간 정보 (BigQuery에서 가져옴)
       const tenure = agent.tenureGroup || ""
-      
+
       // 주요이슈: topErrors 배열에서 첫 번째 항목 사용, 없으면 reason 사용
-      const mainIssue = agent.topErrors && agent.topErrors.length > 0 
-        ? agent.topErrors[0] 
+      const mainIssue = agent.topErrors && agent.topErrors.length > 0
+        ? agent.topErrors[0]
         : agent.reason || "오류율 기준 초과"
-      
+
+      // 기준 목표 오류율 (기본값 3%)
+      const targetRate = 3.0
+
+      // 등재 주차 계산 (daysOnList 기반, 최소 1주)
+      const daysOnList = agent.daysOnList || 1
+      const weeksOnList = Math.ceil(daysOnList / 7)
+
       return {
         id: `${agent.agentId}_${agent.service}_${agent.channel}`, // 고유 키 생성
         agentId: agent.agentId,
@@ -51,8 +58,12 @@ export function FocusManagement() {
         counselingRate: agent.opsRate,
         errorRate: agent.totalRate,
         trend: agent.trend || 0, // 전월 대비 증감율 (BigQuery에서 계산됨)
-        daysOnList: 1, // TODO: 등록일 기반 계산
+        daysOnList: daysOnList,
+        weeksOnList: weeksOnList > 0 ? weeksOnList : undefined,
+        consecutiveDeclineWeeks: agent.consecutiveDeclineWeeks || undefined,
+        consecutiveDeclineDays: agent.consecutiveDeclineDays || undefined,
         mainIssue: mainIssue,
+        targetRate: targetRate,
         actionPlanStatus: "none" as const, // TODO: action plan 상태 연동
       }
     })

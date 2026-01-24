@@ -1,4 +1,5 @@
 "use client"
+import * as React from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,7 +20,12 @@ export interface WatchlistAgent {
   counselingRate: number
   trend: number
   daysOnList: number
+  weeksOnList?: number
+  consecutiveDeclineWeeks?: number
+  consecutiveDeclineDays?: number
   mainIssue: string
+  reason?: string  // 등록 사유 코드 (threshold_exceeded, consecutive_decline, etc.)
+  targetRate?: number  // 기준 오류율
   actionPlanStatus: "none" | "pending" | "in-progress" | "completed"
   lastActionDate?: string
 }
@@ -70,6 +76,60 @@ export function WatchlistTable({
           </Badge>
         )
     }
+  }
+
+  // 등록 사유 뱃지 생성
+  const getReasonBadges = (agent: WatchlistAgent) => {
+    const badges: React.ReactNode[] = []
+    const targetRate = agent.targetRate || 3.0  // 기본 목표 3%
+
+    // 기준대비 초과 (오류율이 목표를 초과한 경우)
+    if (agent.errorRate > targetRate) {
+      const exceededPercent = Number((agent.errorRate - targetRate).toFixed(1))
+      badges.push(
+        <Badge key="exceed" className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5">
+          기준대비 {exceededPercent}%p 초과
+        </Badge>
+      )
+    }
+
+    // 연속 하락 주차
+    if (agent.consecutiveDeclineWeeks && agent.consecutiveDeclineWeeks > 0) {
+      badges.push(
+        <Badge key="week-decline" className="bg-orange-50 text-orange-700 border-orange-200 text-[10px] px-1.5">
+          {agent.consecutiveDeclineWeeks}주 연속 하락
+        </Badge>
+      )
+    }
+
+    // 연속 하락 일수
+    if (agent.consecutiveDeclineDays && agent.consecutiveDeclineDays > 0) {
+      badges.push(
+        <Badge key="day-decline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5">
+          {agent.consecutiveDeclineDays}일 연속 하락
+        </Badge>
+      )
+    }
+
+    // 연속 집중관리 (주 단위)
+    if (agent.weeksOnList && agent.weeksOnList > 0) {
+      badges.push(
+        <Badge key="weeks-list" className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] px-1.5">
+          {agent.weeksOnList}주 연속 집중관리
+        </Badge>
+      )
+    }
+
+    // 뱃지가 없으면 mainIssue 표시
+    if (badges.length === 0 && agent.mainIssue) {
+      return <span className="text-sm text-slate-600">{agent.mainIssue}</span>
+    }
+
+    return (
+      <div className="flex flex-col gap-1">
+        {badges}
+      </div>
+    )
   }
 
   return (
@@ -165,7 +225,7 @@ export function WatchlistTable({
                 </Badge>
               </TableCell>
               <TableCell>
-                <span className="text-sm text-slate-600">{agent.mainIssue}</span>
+                {getReasonBadges(agent)}
               </TableCell>
               <TableCell>{getStatusBadge(agent.actionPlanStatus)}</TableCell>
               <TableCell>
